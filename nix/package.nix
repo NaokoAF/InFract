@@ -10,7 +10,7 @@ buildDotnetModule rec {
   pname = "infract";
   version = "0.1.0";
 
-  src = ./.;
+  src = ../.;
 
   dotnet-sdk = dotnet-sdk_10;
   dotnet-runtime = dotnet-sdk_10;
