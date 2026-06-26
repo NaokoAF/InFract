@@ -39,14 +39,14 @@ public class DualShock4UHidTarget : UHidDevice, IDualShock4Target
 		
 		if (descriptor.HasGyro)
 		{
-			short gyroSpeed = (short)(descriptor.GyroRangeDps / 4);
+			short gyroSpeed = (short)(2000f / descriptor.GyroRangeDps * 500f);
 			calibration.GyroSpeedPlus = gyroSpeed;
 			calibration.GyroSpeedMinus = gyroSpeed;
 		}
 
 		if (descriptor.HasAccel)
 		{
-			short accelSpeed = (short)(16384 / descriptor.AccelRangeGs);
+			short accelSpeed = (short)(descriptor.AccelRangeGs / 4f * 8192f);
 			calibration.AccelXPlus = accelSpeed;
 			calibration.AccelXMinus = (short)-accelSpeed;
 			calibration.AccelYPlus = accelSpeed;

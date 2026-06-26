@@ -27,20 +27,20 @@ public class DualShock4VigemTarget : IDualShock4Target
 		SonyGyroCalibrationReport calibration = VigemGyroCalibration;
 		if (descriptor.HasGyro)
 		{
-			float gyroSpeed = (descriptor.GyroRangeDps / 4f) / 500f;
-			calibration.GyroSpeedPlus = (short)(gyroSpeed * calibration.GyroSpeedPlus);
-			calibration.GyroSpeedMinus = (short)(gyroSpeed * calibration.GyroSpeedMinus);
+			float gyroScale = 2000f / descriptor.GyroRangeDps;
+			calibration.GyroSpeedPlus = (short)(gyroScale * calibration.GyroSpeedPlus);
+			calibration.GyroSpeedMinus = (short)(gyroScale * calibration.GyroSpeedMinus);
 		}
 
 		if (descriptor.HasAccel)
 		{
-			float accelSpeed = (16384f / descriptor.AccelRangeGs) / 8192f;
-			calibration.AccelXPlus = (short)(accelSpeed * calibration.AccelXPlus);
-			calibration.AccelXMinus = (short)(accelSpeed * calibration.AccelXMinus);
-			calibration.AccelYPlus = (short)(accelSpeed * calibration.AccelYPlus);
-			calibration.AccelYMinus = (short)(accelSpeed * calibration.AccelYMinus);
-			calibration.AccelZPlus = (short)(accelSpeed * calibration.AccelZPlus);
-			calibration.AccelZMinus = (short)(accelSpeed * calibration.AccelZMinus);
+			float accelScale = descriptor.AccelRangeGs / 4f;
+			calibration.AccelXPlus = (short)(accelScale * calibration.AccelXPlus);
+			calibration.AccelXMinus = (short)(accelScale * calibration.AccelXMinus);
+			calibration.AccelYPlus = (short)(accelScale * calibration.AccelYPlus);
+			calibration.AccelYMinus = (short)(accelScale * calibration.AccelYMinus);
+			calibration.AccelZPlus = (short)(accelScale * calibration.AccelZPlus);
+			calibration.AccelZMinus = (short)(accelScale * calibration.AccelZMinus);
 		}
 		
 		GyroCalibration = calibration;

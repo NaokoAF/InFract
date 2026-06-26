@@ -50,7 +50,7 @@ public class Cyclone2Driver : IDriver
 			Name = "GameSir Cyclone 2",
 			GyroPollingRate = 250,
 			GyroRangeDps = 2000,
-			AccelRangeGs = 2,
+			AccelRangeGs = 4,
 			SerialNumber = new("CYCLN2"u8),
 			Style = GamepadStyle.XboxOne,
 			Buttons = (

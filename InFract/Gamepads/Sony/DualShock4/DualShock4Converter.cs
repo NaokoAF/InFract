@@ -27,9 +27,8 @@ public class DualShock4Converter : IGamepadConverter
 		Vector3 accelMinus = new(c.AccelXMinus, c.AccelYMinus, c.AccelZMinus);
 		gyroBias = new(c.GyroPitchBias, c.GyroYawBias, c.GyroRollBias);
 		accelBias = accelPlus - (accelPlus - accelMinus) / 2f;
-		gyroScale = Vector3.One * (c.GyroSpeedPlus + c.GyroSpeedMinus) / (gyroPlus - gyroMinus) * (32768f / 2048f);
+		gyroScale = Vector3.One * (c.GyroSpeedPlus + c.GyroSpeedMinus) / (gyroPlus - gyroMinus) * (32768f / 2000f);
 		accelScale = Vector3.One / (accelPlus - accelMinus) * (32768f / 2f);
-		Console.WriteLine(gyroScale);
 	}
 
 	public void Update(Gamepad gamepad)
