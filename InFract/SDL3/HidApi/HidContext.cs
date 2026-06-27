@@ -13,17 +13,16 @@ public unsafe class HidContext : IDisposable
 	public HidContext()
 	{
 		SDL_SetHint(SDL_HINT_HIDAPI_ENUMERATE_ONLY_CONTROLLERS, "0");
-		if (SDL_hid_init() < 0)
-			throw new Exception($"Failed to initialize SDL HIDAPI: {SDL_GetError()}");
+		if (SDL_hid_init() < 0) throw new SdlException();
 	}
 
 	public HidDevice Open(string path)
 	{
 		SDL_hid_device* devicePtr = SDL_hid_open_path(path);
-		if (devicePtr == null) throw new Exception($"Failed to open HID device: {SDL_GetError()}");
+		if (devicePtr == null) throw new SdlException();
 
 		SDL_hid_device_info* infoPtr = SDL_hid_get_device_info(devicePtr);
-		if (infoPtr == null) throw new Exception($"Failed to get HID device info: {SDL_GetError()}");
+		if (infoPtr == null) throw new SdlException();
 
 		return new(devicePtr, ConvertDeviceInfo(infoPtr));
 	}
@@ -55,7 +54,7 @@ public unsafe class HidContext : IDisposable
 	private static string? PtrToStringUnicode(nint pointer)
 	{
 		if (pointer == 0) return null;
-		
+
 		// iterate through every char until we reach a null terminator
 		ref char first = ref Unsafe.AsRef<char>((void*)pointer);
 		ref char c = ref first;
