@@ -6,18 +6,18 @@ using static SDL.SDL3;
 
 namespace InFract.SDL3.HidApi;
 
-public static unsafe class Hid
+public unsafe class HidContext : IDisposable
 {
-	public static uint DeviceChangeCount => SDL_hid_device_change_count();
+	public uint DeviceChangeCount => SDL_hid_device_change_count();
 
-	public static void Initialize()
+	public HidContext()
 	{
 		SDL_SetHint(SDL_HINT_HIDAPI_ENUMERATE_ONLY_CONTROLLERS, "0");
 		if (SDL_hid_init() < 0)
 			throw new Exception($"Failed to initialize SDL HIDAPI: {SDL_GetError()}");
 	}
 
-	public static HidDevice Open(string path)
+	public HidDevice Open(string path)
 	{
 		SDL_hid_device* devicePtr = SDL_hid_open_path(path);
 		if (devicePtr == null) throw new Exception($"Failed to open HID device: {SDL_GetError()}");
@@ -28,16 +28,13 @@ public static unsafe class Hid
 		return new(devicePtr, ConvertDeviceInfo(infoPtr));
 	}
 
-	public static DeviceEnumerator EnumerateDevices(ushort vendorId = 0, ushort productId = 0)
+	public DeviceEnumerator EnumerateDevices(ushort vendorId = 0, ushort productId = 0)
 	{
 		return new(SDL_hid_enumerate(vendorId, productId));
 	}
 
-	public static void Deinitialize()
-	{
-		SDL_hid_exit();
-	}
-	
+	public void Dispose() => SDL_hid_exit();
+
 	private static HidDeviceInfo ConvertDeviceInfo(SDL_hid_device_info* info) => new()
 	{
 		Path = PtrToStringUTF8(info->path)!,

@@ -1,28 +1,35 @@
-using InFract.Emulators;
 using InFract.Emulators.UHid;
-using InFract.Emulators.Viiper;
 using InFract.Gamepads;
+using Microsoft.Extensions.Logging;
 
 namespace InFract.Platforms;
 
 public class LinuxPlatform : IPlatform
 {
-	private UHidEmulator uhid = new();
+	private readonly ILogger<LinuxPlatform> logger;
+	private readonly Hints hints;
+	private readonly UHidEmulator uhid = new();
 
 	private const string DefaultConverter = "dualsense";
+
+	public LinuxPlatform(ILogger<LinuxPlatform> logger, Hints hints)
+	{
+		this.logger = logger;
+		this.hints = hints;
+	}
 
 	public ValueTask StartAsync() => ValueTask.CompletedTask;
 
 	public IGamepadConverter CreateConverter(Gamepad gamepad)
 	{
-		string converterId = Hints.Get(Hints.Converter).ToLowerInvariant();
-		
+		string converterId = hints.Get(Hints.Converter).ToLowerInvariant();
+
 		IGamepadConverter? converter;
 		if (!uhid.HasConverter(converterId)) converterId = DefaultConverter;
 
 		if (!uhid.TryCreateConverter(converterId, gamepad.Descriptor, out converter))
 			throw new Exception($"Failed to create converter: {converterId}");
-		
+
 		return converter;
 	}
 

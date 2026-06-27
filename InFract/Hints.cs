@@ -3,7 +3,7 @@ using System.Collections.Frozen;
 
 namespace InFract;
 
-public static class Hints
+public class Hints
 {
 	public const string Emulator = "EMULATOR";
 	public const string Converter = "CONVERTER";
@@ -32,7 +32,7 @@ public static class Hints
 		Registry.TryAdd(name, defaultValue);
 	}
 
-	public static string Get(string name)
+	public string Get(string name)
 	{
 		if (!Registry.TryGetValue(name, out var defaultValue))
 			throw new ArgumentOutOfRangeException(nameof(name), $"Unknown hint: {name}");
@@ -40,7 +40,7 @@ public static class Hints
 		return Values.GetValueOrDefault(name, defaultValue);
 	}
 
-	public static int GetInt(string name)
+	public int GetInt(string name)
 	{
 		if (!Registry.TryGetValue(name, out var defaultValue))
 			throw new ArgumentOutOfRangeException(nameof(name), $"Unknown hint: {name}");
@@ -50,7 +50,7 @@ public static class Hints
 			: int.Parse(defaultValue);
 	}
 
-	public static void Set(string name, string? value)
+	public void Set(string name, string? value)
 	{
 		if (!Registry.TryGetValue(name, out var defaultValue))
 			throw new ArgumentOutOfRangeException(nameof(name), $"Unknown hint: {name}");

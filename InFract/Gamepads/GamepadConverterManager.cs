@@ -1,23 +1,28 @@
+using InFract.Platforms;
+using Microsoft.Extensions.Logging;
+
 namespace InFract.Gamepads;
 
 public class GamepadConverterManager : IDisposable
 {
+	private readonly ILogger<GamepadConverterManager> logger;
+	private readonly IPlatform platform;
 	private readonly Dictionary<Gamepad, IGamepadConverter> converters = new();
-	private readonly Func<Gamepad, IGamepadConverter> factory;
 
-	public GamepadConverterManager(Func<Gamepad, IGamepadConverter> factory)
+	public GamepadConverterManager(ILogger<GamepadConverterManager> logger, IPlatform platform)
 	{
-		this.factory = factory;
+		this.logger = logger;
+		this.platform = platform;
 	}
-	
+
 	public IGamepadConverter Open(Gamepad gamepad)
 	{
 		IGamepadConverter? converter;
 		if (converters.TryGetValue(gamepad, out converter)) return converter;
 
-		converter = factory(gamepad);
+		converter = platform.CreateConverter(gamepad);
 		gamepad.Updated += () => converter.Update(gamepad);
-		
+
 		converters.Add(gamepad, converter);
 		return converter;
 	}

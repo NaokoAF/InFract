@@ -3,36 +3,45 @@ using InFract.Emulators.Vigem;
 using InFract.Emulators.Vigem.Native;
 using InFract.Emulators.Viiper;
 using InFract.Gamepads;
+using Microsoft.Extensions.Logging;
 
 namespace InFract.Platforms;
 
 public class WindowsPlatform : IPlatform
 {
+	private readonly ILogger<WindowsPlatform> logger;
+	private readonly Hints hints;
 	private VigemEmulator? vigem;
 	private ViiperEmulator? viiper;
 
 	private const string DefaultVigemConverter = "dualshock4";
 	private const string DefaultViiperConverter = "dualsense";
 
+	public WindowsPlatform(ILogger<WindowsPlatform> logger, Hints hints)
+	{
+		this.logger = logger;
+		this.hints = hints;
+	}
+
 	public async ValueTask StartAsync()
 	{
-		string emulatorHint = Hints.Get(Hints.Emulator).ToLowerInvariant();
+		string emulatorHint = hints.Get(Hints.Emulator).ToLowerInvariant();
 		if (emulatorHint is "viiper" or "")
 		{
-			string viiperHost = Hints.Get(Hints.ViiperAddress);
-			int viiperPort = Hints.GetInt(Hints.ViiperPort);
-			string viiperPassword = Hints.Get(Hints.ViiperPassword);
+			string viiperHost = hints.Get(Hints.ViiperAddress);
+			int viiperPort = hints.GetInt(Hints.ViiperPort);
+			string viiperPassword = hints.Get(Hints.ViiperPassword);
 			try
 			{
 				viiper = new(viiperHost, viiperPort, viiperPassword);
 				await viiper.StartAsync();
 
-				Console.WriteLine($"VIIPER connected: {viiper.ServerName} ({viiper.ServerVersion})");
+				logger.LogInformation($"VIIPER connected: {viiper.ServerName} ({viiper.ServerVersion})");
 			}
 			catch (Exception e)
 			{
+				logger.LogError(e, "Failed to connect to VIIPER");
 				viiper = null;
-				Console.Error.WriteLine($"Failed to connect to VIIPER: {e}");
 			}
 		}
 
@@ -41,12 +50,12 @@ public class WindowsPlatform : IPlatform
 			try
 			{
 				vigem = new();
-				Console.WriteLine("ViGEm connected");
+				logger.LogInformation("ViGEm connected");
 			}
 			catch (VigemException e)
 			{
+				logger.LogError(e, "Failed to connect to ViGEm");
 				vigem = null;
-				Console.Error.WriteLine($"Failed to connect to ViGEm: {e.Error}");
 			}
 		}
 
@@ -56,8 +65,8 @@ public class WindowsPlatform : IPlatform
 
 	public IGamepadConverter CreateConverter(Gamepad gamepad)
 	{
-		string converterId = Hints.Get(Hints.Converter).ToLowerInvariant();
-		
+		string converterId = hints.Get(Hints.Converter).ToLowerInvariant();
+
 		IEmulator emulator;
 		string defaultConverter;
 		if (viiper != null)
@@ -74,7 +83,7 @@ public class WindowsPlatform : IPlatform
 		{
 			throw new Exception("No input emulator installed!");
 		}
-		
+
 		IGamepadConverter? converter;
 		if (!emulator.HasConverter(converterId)) converterId = defaultConverter;
 

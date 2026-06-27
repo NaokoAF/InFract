@@ -1,33 +1,46 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using InFract.SDL3.HidApi;
+using Microsoft.Extensions.Logging;
 
 namespace InFract.Drivers;
 
-public class DriverManager : IDisposable
+public class DriverManager : IAsyncDisposable, IDisposable
 {
+	public ImmutableArray<IDriver> Drivers => drivers;
+	
 	public event Action<IDriverDevice>? DeviceOpened;
-	public event Action<IDriver, HidDeviceInfo, Exception>? DeviceOpenFailed;
 	public event Action<IDriverDevice>? DeviceClosed;
-	public event Action<IDriverDevice, Exception>? DeviceErrored;
 
-	private uint prevChangeCount;
+	private readonly ILogger<DriverManager> logger;
+	private readonly HidContext hid;
+	private readonly ImmutableArray<IDriver> drivers;
 	private readonly CancellationTokenSource cts = new();
-	private readonly List<IDriver> drivers = new();
 	private readonly ConcurrentDictionary<string, (IDriverDevice Driver, Task Task)> devices = new();
+	private uint prevChangeCount;
 
-	public void Register(IDriver driver)
+	public DriverManager(
+		ILogger<DriverManager> logger,
+		HidContext hid,
+		IEnumerable<IDriver> drivers
+	)
 	{
-		drivers.Add(driver);
+		this.logger = logger;
+		this.hid = hid;
+		this.drivers = drivers.ToImmutableArray();
+		
+		// list drivers
+		logger.LogInformation($"Drivers: {string.Join(", ", this.drivers.Select(d => d.GetType().Name))}");
+
 	}
 
-	public bool Update()
+	public void Update()
 	{
-		uint changeCount = Hid.DeviceChangeCount;
-		if (changeCount == prevChangeCount)
-			return false;
+		uint changeCount = hid.DeviceChangeCount;
+		if (changeCount == prevChangeCount) return;
 
-		foreach (HidDeviceInfo deviceInfo in Hid.EnumerateDevices())
+		foreach (HidDeviceInfo deviceInfo in hid.EnumerateDevices())
 		{
 			string path = deviceInfo.Path;
 
@@ -42,15 +55,18 @@ public class DriverManager : IDisposable
 			IDriverDevice driverDevice;
 			try
 			{
-				device = Hid.Open(path);
+				device = hid.Open(path);
 				driverDevice = driver.Create(device);
 			}
 			catch (Exception e)
 			{
+				logger.LogError(e, $"Failed to open device: {driver.GetType().Name} [{path}]");
+				
 				device?.Dispose(); // in case the device was opened, but the driver failed
-				DeviceOpenFailed?.Invoke(driver, deviceInfo, e);
 				continue;
 			}
+			
+			logger.LogInformation($"Device opened: {driverDevice.Gamepad.Descriptor.Name}");
 
 			// start driver in its own thead
 			Task task = Task.Factory.StartNew(
@@ -66,7 +82,10 @@ public class DriverManager : IDisposable
 				devices.TryRemove(path, out _);
 
 				if (t.IsFaulted && t.Exception != null)
-					DeviceErrored?.Invoke(driverDevice, t.Exception.InnerException ?? t.Exception);
+				{
+					Exception? exception = t.Exception.InnerException ?? t.Exception;
+					logger.LogError(exception, $"Device error: {driverDevice.Gamepad.Descriptor.Name}");
+				}
 
 				DeviceClosed?.Invoke(driverDevice);
 
@@ -78,19 +97,16 @@ public class DriverManager : IDisposable
 		}
 
 		prevChangeCount = changeCount;
-		return true;
 	}
 
-	public void Dispose()
+	public async ValueTask DisposeAsync()
 	{
-		cts.Cancel();
-		
-		// wait for all threads to stop
-		Task.WaitAll(devices.Values.Select(x => x.Task).ToArray());
-		devices.Clear();
-
+		await cts.CancelAsync();
+		await Task.WhenAll(devices.Values.Select(x => x.Task).ToArray());
 		cts.Dispose();
 	}
+	
+	public void Dispose() => DisposeAsync().GetAwaiter().GetResult();
 
 	private bool TryGetDriverForDevice(in HidDeviceInfo deviceInfo, [NotNullWhen(true)] out IDriver? driver)
 	{
