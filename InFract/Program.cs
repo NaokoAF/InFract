@@ -4,6 +4,7 @@ using InFract.Drivers.GameSir;
 using InFract.Gamepads;
 using InFract.Platforms;
 using InFract.SDL3.HidApi;
+using InFract.Usb.LibUsb;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -27,6 +28,7 @@ else
 collection.AddSingleton<IDriver, Cyclone2Driver>();
 
 // app
+collection.AddSingleton<LibUsbContext>();
 collection.AddSingleton<HidContext>();
 collection.AddSingleton<GamepadConverterManager>();
 collection.AddSingleton<DriverManager>();

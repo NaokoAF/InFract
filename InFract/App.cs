@@ -1,6 +1,5 @@
 using InFract.Drivers;
 using InFract.Gamepads;
-using InFract.SDL3.HidApi;
 using Microsoft.Extensions.Logging;
 
 namespace InFract;
@@ -37,10 +36,7 @@ public class App
 			}
 		};
 
-		driverManager.DeviceClosed += driver =>
-		{
-			converterManager.Close(driver.Gamepad);
-		};
+		driverManager.DeviceClosed += driver => converterManager.Close(driver.Gamepad);
 	}
 
 	public void Start(CancellationToken cancellationToken)
@@ -51,12 +47,13 @@ public class App
 			hints.Set(hint, Environment.GetEnvironmentVariable($"INFRACT_{hint}"));
 		}
 
+		driverManager.Start();
+		
 		// main loop
-		logger.LogInformation("Started! Waiting for devices...");
 		while (!cancellationToken.IsCancellationRequested)
 		{
 			driverManager.Update();
-			Thread.Sleep(1000);
+			converterManager.Update();
 		}
 
 		logger.LogInformation("Shutting down...");

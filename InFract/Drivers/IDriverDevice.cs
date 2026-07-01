@@ -1,11 +1,11 @@
 using InFract.Gamepads;
-using InFract.SDL3.HidApi;
+using InFract.Usb.LibUsb;
 
 namespace InFract.Drivers;
 
 public interface IDriverDevice : IDisposable
 {
-	HidDevice Device { get; }
+	LibUsbDeviceHandle Device { get; }
 	Gamepad Gamepad { get; }
-	void Start(CancellationToken cancellationToken);
+	void Update();
 }

@@ -21,8 +21,6 @@ public class GamepadConverterManager : IDisposable
 		if (converters.TryGetValue(gamepad, out converter)) return converter;
 
 		converter = platform.CreateConverter(gamepad);
-		gamepad.Updated += () => converter.Update(gamepad);
-
 		converters.Add(gamepad, converter);
 		return converter;
 	}
@@ -33,6 +31,14 @@ public class GamepadConverterManager : IDisposable
 		converter.Dispose();
 	}
 
+	public void Update()
+	{
+		foreach ((Gamepad gamepad, IGamepadConverter converter) in converters)
+		{
+			converter.Update(gamepad);
+		}
+	}
+	
 	public void Dispose()
 	{
 		foreach (IGamepadConverter converter in converters.Values) converter.Dispose();

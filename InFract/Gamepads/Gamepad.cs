@@ -22,8 +22,6 @@ public class Gamepad
 	public byte RgbBlue { get; set; }
 	public Span<GamepadTouch> Touches => touches;
 
-	public event Action? Updated;
-
 	private GamepadButtons buttons;
 	private readonly short[] axes = new short[6];
 	private readonly GamepadTouch[] touches;
@@ -45,7 +43,4 @@ public class Gamepad
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public void SetAxis(GamepadAxis axis, short value) => axes[(int)axis] = value;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public void Update() => Updated?.Invoke();
 }

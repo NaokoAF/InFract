@@ -1,9 +1,9 @@
-using InFract.SDL3.HidApi;
+using InFract.Usb.LibUsb;
 
 namespace InFract.Drivers;
 
 public interface IDriver
 {
-	bool IsSupported(in HidDeviceInfo device);
-	IDriverDevice Create(HidDevice device);
+	bool IsSupported(LibUsbDevice device, LibUsbDeviceDescriptor descriptor);
+	IDriverDevice Open(LibUsbDeviceHandle device);
 }

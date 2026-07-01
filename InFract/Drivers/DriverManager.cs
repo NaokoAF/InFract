@@ -1,125 +1,155 @@
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using InFract.SDL3.HidApi;
+using InFract.Usb.LibUsb;
+using InFract.Usb.LibUsb.Native;
 using Microsoft.Extensions.Logging;
+using static InFract.Usb.LibUsb.Native.libusb_error;
+using static InFract.Usb.LibUsb.Native.libusb_hotplug_event;
+using static InFract.Usb.LibUsb.Native.libusb_hotplug_flag;
 
 namespace InFract.Drivers;
 
-public class DriverManager : IAsyncDisposable, IDisposable
+public class DriverManager : IDisposable
 {
 	public ImmutableArray<IDriver> Drivers => drivers;
-	
+
 	public event Action<IDriverDevice>? DeviceOpened;
 	public event Action<IDriverDevice>? DeviceClosed;
 
 	private readonly ILogger<DriverManager> logger;
-	private readonly HidContext hid;
+	private readonly LibUsbContext libUsb;
 	private readonly ImmutableArray<IDriver> drivers;
-	private readonly CancellationTokenSource cts = new();
-	private readonly ConcurrentDictionary<string, (IDriverDevice Driver, Task Task)> devices = new();
-	private uint prevChangeCount;
+	private readonly List<IDriverDevice> devices = new();
+	private readonly Dictionary<(byte, byte), IDriverDevice> deviceMap = new();
+	private readonly Lock lockObject = new();
+	private libusb_hotplug_callback_handle? hotplugCallbackHandle;
 
-	public DriverManager(
-		ILogger<DriverManager> logger,
-		HidContext hid,
-		IEnumerable<IDriver> drivers
-	)
+	public DriverManager(ILogger<DriverManager> logger, LibUsbContext libUsb, IEnumerable<IDriver> drivers)
 	{
 		this.logger = logger;
-		this.hid = hid;
+		this.libUsb = libUsb;
 		this.drivers = drivers.ToImmutableArray();
-		
+
 		// list drivers
 		logger.LogInformation($"Drivers: {string.Join(", ", this.drivers.Select(d => d.GetType().Name))}");
+	}
 
+	public void Start()
+	{
+		hotplugCallbackHandle = libUsb.RegisterHotPlugCallback(
+			LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
+			LIBUSB_HOTPLUG_ENUMERATE,
+			OnHotplug
+		);
 	}
 
 	public void Update()
 	{
-		uint changeCount = hid.DeviceChangeCount;
-		if (changeCount == prevChangeCount) return;
+		libUsb.HandleEvents(500);
 
-		foreach (HidDeviceInfo deviceInfo in hid.EnumerateDevices())
+		lock (lockObject)
 		{
-			string path = deviceInfo.Path;
+			for (int i = devices.Count - 1; i >= 0; i--)
+			{
+				IDriverDevice driver = devices[i];
+				bool close = false;
 
-			// skip already opened devices, and devices on cooldown
-			if (devices.ContainsKey(path)) continue;
+				try
+				{
+					driver.Update();
+				}
+				catch (LibUsbException e)
+				{
+					if (e.Error != LIBUSB_ERROR_NO_DEVICE) throw;
+					close = true;
+				}
+				catch (Exception e)
+				{
+					logger.LogError(e, $"Driver error: {driver.Gamepad.Descriptor.Name}");
+					close = true;
+				}
+
+				if (close) Close(driver);
+			}
+		}
+	}
+
+	private bool OnHotplug(LibUsbDevice device, libusb_hotplug_event type)
+	{
+		if (type != LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) return false;
+
+		(byte, byte) identifier = (device.BusNumber, device.DeviceAddress);
+
+		IDriverDevice driverDevice;
+		lock (lockObject)
+		{
+			// skip already opened devices
+			if (deviceMap.ContainsKey(identifier)) return false;
 
 			// get driver for device
-			if (!TryGetDriverForDevice(deviceInfo, out IDriver? driver)) continue;
+			if (!TryGetDriverForDevice(device, out IDriver? driver)) return false;
 
-			// try to open device and create driver
-			HidDevice? device = null;
-			IDriverDevice driverDevice;
+			// try to open driver
+			LibUsbDeviceHandle? deviceHandle = null;
 			try
 			{
-				device = hid.Open(path);
-				driverDevice = driver.Create(device);
+				deviceHandle = device.Open();
+				driverDevice = driver.Open(deviceHandle);
 			}
 			catch (Exception e)
 			{
-				logger.LogError(e, $"Failed to open device: {driver.GetType().Name} [{path}]");
-				
-				device?.Dispose(); // in case the device was opened, but the driver failed
-				continue;
+				deviceHandle?.Dispose();
+				logger.LogError(e, $"Failed to open driver: {driver.GetType().Name} [{device.BusNumber}-{device.DeviceAddress}]");
+				return false;
 			}
-			
-			logger.LogInformation($"Device opened: {driverDevice.Gamepad.Descriptor.Name}");
 
-			// start driver in its own thead
-			Task task = Task.Factory.StartNew(
-				() => driverDevice.Start(cts.Token),
-				cts.Token,
-				TaskCreationOptions.LongRunning,
-				TaskScheduler.Default
-			);
+			logger.LogInformation($"Driver opened: {driverDevice.Gamepad.Descriptor.Name}");
 
-			// clean up when the thread exits
-			task.ContinueWith(t =>
-			{
-				devices.TryRemove(path, out _);
-
-				if (t.IsFaulted && t.Exception != null)
-				{
-					Exception? exception = t.Exception.InnerException ?? t.Exception;
-					logger.LogError(exception, $"Device error: {driverDevice.Gamepad.Descriptor.Name}");
-				}
-
-				DeviceClosed?.Invoke(driverDevice);
-
-				driverDevice.Dispose();
-			});
-
-			devices.TryAdd(path, (driverDevice, task));
-			DeviceOpened?.Invoke(driverDevice);
+			devices.Add(driverDevice);
+			deviceMap.Add(identifier, driverDevice);
 		}
 
-		prevChangeCount = changeCount;
+		DeviceOpened?.Invoke(driverDevice);
+		return false;
 	}
 
-	public async ValueTask DisposeAsync()
+	private void Close(IDriverDevice driver)
 	{
-		await cts.CancelAsync();
-		await Task.WhenAll(devices.Values.Select(x => x.Task).ToArray());
-		cts.Dispose();
-	}
-	
-	public void Dispose() => DisposeAsync().GetAwaiter().GetResult();
+		LibUsbDevice usbDevice = driver.Device.Device;
+		(byte, byte) identifier = (usbDevice.BusNumber, usbDevice.DeviceAddress);
 
-	private bool TryGetDriverForDevice(in HidDeviceInfo deviceInfo, [NotNullWhen(true)] out IDriver? driver)
+		lock (lockObject)
+		{
+			logger.LogInformation($"Driver closed: {driver.Gamepad.Descriptor.Name}");
+			DeviceClosed?.Invoke(driver);
+
+			deviceMap.Remove(identifier);
+			devices.Remove(driver);
+			driver.Dispose();
+		}
+	}
+
+	private bool TryGetDriverForDevice(LibUsbDevice device, [NotNullWhen(true)] out IDriver? driver)
 	{
+		LibUsbDeviceDescriptor descriptor = device.GetDeviceDescriptor();
 		foreach (IDriver other in drivers)
 		{
-			if (other.IsSupported(deviceInfo))
-			{
-				driver = other;
-				return true;
-			}
+			if (!other.IsSupported(device, descriptor)) continue;
+
+			driver = other;
+			return true;
 		}
 
 		driver = null;
 		return false;
+	}
+
+	public void Dispose()
+	{
+		if (hotplugCallbackHandle != null) libUsb.DeregisterHotPlugCallback(hotplugCallbackHandle.Value);
+
+		lock (lockObject)
+			for (int i = devices.Count - 1; i >= 0; i--)
+				Close(devices[i]);
 	}
 }

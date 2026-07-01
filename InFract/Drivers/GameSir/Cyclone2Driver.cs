@@ -2,34 +2,35 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using InFract.Gamepads;
 using InFract.Gamepads.GameSir.Cyclone2;
-using InFract.SDL3.HidApi;
+using InFract.Usb.Hid;
+using InFract.Usb.LibUsb;
+using InFract.Usb.XUsb;
 
 namespace InFract.Drivers.GameSir;
 
 public class Cyclone2Driver : IDriver
 {
-	public bool IsSupported(in HidDeviceInfo device)
+	public bool IsSupported(LibUsbDevice device, LibUsbDeviceDescriptor descriptor) => descriptor is
 	{
-		if (device.VendorId != UsbIds.GameSirVendorId) return false;
+		IdVendor: UsbIds.GameSirVendorId,
+		IdProduct: UsbIds.GameSirCyclone2WiredProductId or UsbIds.GameSirCyclone2WirelessProductId
+	};
 
-		if (device.ProductId == UsbIds.GameSirCyclone2WiredProductId ||
-		    device.ProductId == UsbIds.GameSirCyclone2WirelessProductId)
-		{
-			// Cyclone 2 appears as multiple HID interfaces. search for the vendor-defined one
-			return device.UsagePage == 0xFFF0;
-		}
-
-		return false;
+	public IDriverDevice Open(LibUsbDeviceHandle device)
+	{
+		DriverDevice driver = new(device);
+		driver.Open();
+		return driver;
 	}
-
-	public IDriverDevice Create(HidDevice device) => new DriverDevice(device);
 
 	private class DriverDevice : IDriverDevice
 	{
-		public HidDevice Device => device;
+		public LibUsbDeviceHandle Device => device;
 		public Gamepad Gamepad => gamepad;
 
-		private readonly HidDevice device;
+		private readonly LibUsbDeviceHandle device;
+		private readonly XUsbDriver xusb;
+		private readonly HidDriver hid;
 		private readonly Gamepad gamepad;
 		private long prevHeartbeatTime;
 		private byte rumbleLeft;
@@ -37,10 +38,19 @@ public class Cyclone2Driver : IDriver
 		private long sensorTicks;
 		private ushort? prevSensorTick;
 
-		private const int ReportSize = 64;
+		private const int ReportSizeXUsb = 32;
+		private const int ReportSizeHid = 64;
 		private const byte ReportIdOutput = 0x0F;
 		private const byte ReportIdInput = 0x12;
 		private const byte ReportIdInputCommands = 0x10;
+
+		private const byte InterfaceNumberXUsb = 0x00;
+		private const byte EndpointXUsbIn = 0x82;
+		private const byte EndpointXUsbOut = 0x02;
+
+		private const byte InterfaceNumberHid = 0x01;
+		private const byte EndpointHidIn = 0x84;
+		private const byte EndpointHidOut = 0x04;
 
 		private static readonly long HeartbeatRate = Stopwatch.Frequency / 2; // 500ms
 		private static ReadOnlySpan<byte> PacketHeartbeat => [ReportIdOutput, (byte)Cyclone2Command.OutHeartbeat];
@@ -64,141 +74,104 @@ public class Cyclone2Driver : IDriver
 			),
 		};
 
-		public DriverDevice(HidDevice device)
+		public DriverDevice(LibUsbDeviceHandle device)
 		{
 			this.device = device;
+			xusb = new(device, InterfaceNumberXUsb, EndpointXUsbIn, EndpointXUsbOut, ReportSizeXUsb, ReportSizeXUsb);
+			xusb.InputReceived += OnXUsbInputReceived;
+
+			hid = new(device, InterfaceNumberHid, EndpointHidIn, EndpointHidOut, ReportSizeHid, ReportSizeHid);
+			hid.InputReceived += OnHidInputReceived;
+
 			gamepad = new(Descriptor);
-
-			// hid writes can fail. try a few times
-			bool switched = false;
-			for (int attempts = 0; attempts < 8; attempts++)
-			{
-				switched = SendHeartbeat();
-				if (switched) break;
-			}
-
-			if (!switched) throw new Exception("Failed to switch to extended mode");
-
-			// wait for an input packet
-			bool acknowledged = false;
-			byte[] readBuffer = new byte[ReportSize];
-			for (int attempts = 0; attempts < 100; attempts++)
-			{
-				int readBytes = device.Read(readBuffer, 1);
-				if (readBytes < 0) throw new Exception("Failed to read response");
-
-				acknowledged = readBytes == ReportSize && readBuffer[0] == ReportIdInput;
-				if (acknowledged) break;
-			}
-
-			if (!acknowledged) throw new Exception("No response after switching to extended mode");
 		}
 
-		public void Start(CancellationToken cancellationToken)
+		public void Open()
 		{
-			byte[] readBuffer = new byte[ReportSize];
-			while (device.Read(readBuffer, 500) > 0 && !cancellationToken.IsCancellationRequested)
+			device.SetAutoDetachKernelDriver(true);
+
+			xusb.Open();
+			hid.Open();
+		}
+
+		public void Update()
+		{
+			// periodically send heartbeat to enable hid mode
+			if (Stopwatch.GetTimestamp() - prevHeartbeatTime >= HeartbeatRate)
 			{
-				// read input
-				if (readBuffer[0] == ReportIdInput)
-				{
-					ref Cyclone2InputReport inputReport = ref Unsafe.As<byte, Cyclone2InputReport>(ref readBuffer[1]);
-					UpdateState(inputReport);
-				}
+				SendHeartbeat();
+			}
 
-				// periodically send heartbeat to enable hid mode
-				if (Stopwatch.GetTimestamp() - prevHeartbeatTime >= HeartbeatRate)
-				{
-					SendHeartbeat();
-				}
-
-				// rumble
-				if (rumbleLeft != gamepad.RumbleLeft || rumbleRight != gamepad.RumbleRight)
+			if (rumbleLeft != gamepad.RumbleLeft || rumbleRight != gamepad.RumbleRight)
+			{
+				if (xusb.Rumble(gamepad.RumbleLeft, gamepad.RumbleRight))
 				{
 					rumbleLeft = gamepad.RumbleLeft;
 					rumbleRight = gamepad.RumbleRight;
-					SendRumble(rumbleLeft, rumbleRight);
 				}
 			}
 		}
 
-		private void UpdateState(in Cyclone2InputReport state)
+		private void OnXUsbInputReceived(XUsbInputReport input)
 		{
-			Cyclone2Buttons buttons = state.RawButtons;
-			Cyclone2SpecialButtons special = state.RawSpecialButtons;
+			// buttons
+			gamepad.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
+			gamepad.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
+			gamepad.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
+			gamepad.SetButton(GamepadButtons.DpadRight, input.Buttons.HasFlag(XUsbButtons.DpadRight));
+			gamepad.SetButton(GamepadButtons.West, input.Buttons.HasFlag(XUsbButtons.X));
+			gamepad.SetButton(GamepadButtons.South, input.Buttons.HasFlag(XUsbButtons.A));
+			gamepad.SetButton(GamepadButtons.East, input.Buttons.HasFlag(XUsbButtons.B));
+			gamepad.SetButton(GamepadButtons.North, input.Buttons.HasFlag(XUsbButtons.Y));
+			gamepad.SetButton(GamepadButtons.LeftShoulder, input.Buttons.HasFlag(XUsbButtons.LeftShoulder));
+			gamepad.SetButton(GamepadButtons.RightShoulder, input.Buttons.HasFlag(XUsbButtons.RightShoulder));
+			gamepad.SetButton(GamepadButtons.Back, input.Buttons.HasFlag(XUsbButtons.Back));
+			gamepad.SetButton(GamepadButtons.Start, input.Buttons.HasFlag(XUsbButtons.Start));
+			gamepad.SetButton(GamepadButtons.Guide, input.Buttons.HasFlag(XUsbButtons.Guide));
+			gamepad.SetButton(GamepadButtons.LeftStick, input.Buttons.HasFlag(XUsbButtons.LeftThumb));
+			gamepad.SetButton(GamepadButtons.RightStick, input.Buttons.HasFlag(XUsbButtons.RightThumb));
 
-			// dpad
-			Cyclone2Buttons dpad = (Cyclone2Buttons)((int)buttons & 0xF);
-			bool dpadUp = dpad is Cyclone2Buttons.DpadNorth or Cyclone2Buttons.DpadNortheast or Cyclone2Buttons.DpadNorthwest;
-			bool dpadDown = dpad is Cyclone2Buttons.DpadSouth or Cyclone2Buttons.DpadSoutheast or Cyclone2Buttons.DpadSouthwest;
-			bool dpadLeft = dpad is Cyclone2Buttons.DpadWest or Cyclone2Buttons.DpadNorthwest or Cyclone2Buttons.DpadSouthwest;
-			bool dpadRight = dpad is Cyclone2Buttons.DpadEast or Cyclone2Buttons.DpadNortheast or Cyclone2Buttons.DpadSoutheast;
-			gamepad.SetButton(GamepadButtons.DpadUp, dpadUp);
-			gamepad.SetButton(GamepadButtons.DpadDown, dpadDown);
-			gamepad.SetButton(GamepadButtons.DpadLeft, dpadLeft);
-			gamepad.SetButton(GamepadButtons.DpadRight, dpadRight);
+			// axes
+			gamepad.SetAxis(GamepadAxis.LeftStickX, input.ThumbLeftX);
+			gamepad.SetAxis(GamepadAxis.LeftStickY, (short)~input.ThumbLeftY);
+			gamepad.SetAxis(GamepadAxis.RightStickX, input.ThumbRightX);
+			gamepad.SetAxis(GamepadAxis.RightStickY, (short)~input.ThumbRightY);
+			gamepad.SetAxis(GamepadAxis.LeftTrigger, BitHelpers.ScaleByteToShort(input.LeftTrigger));
+			gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(input.RightTrigger));
+		}
+
+		private void OnHidInputReceived(ReadOnlySpan<byte> data)
+		{
+			if (data[0] != ReportIdInput) return;
+
+			ref Cyclone2InputReport input = ref Unsafe.As<byte, Cyclone2InputReport>(ref Unsafe.AsRef(in data[1]));
 
 			// buttons
-			gamepad.SetButton(GamepadButtons.West, buttons.HasFlag(Cyclone2Buttons.West));
-			gamepad.SetButton(GamepadButtons.South, buttons.HasFlag(Cyclone2Buttons.South));
-			gamepad.SetButton(GamepadButtons.East, buttons.HasFlag(Cyclone2Buttons.East));
-			gamepad.SetButton(GamepadButtons.North, buttons.HasFlag(Cyclone2Buttons.North));
-			gamepad.SetButton(GamepadButtons.LeftShoulder, buttons.HasFlag(Cyclone2Buttons.LeftShoulder));
-			gamepad.SetButton(GamepadButtons.RightShoulder, buttons.HasFlag(Cyclone2Buttons.RightShoulder));
-			gamepad.SetButton(GamepadButtons.Back, buttons.HasFlag(Cyclone2Buttons.Share));
-			gamepad.SetButton(GamepadButtons.Start, buttons.HasFlag(Cyclone2Buttons.Options));
-			gamepad.SetButton(GamepadButtons.LeftStick, buttons.HasFlag(Cyclone2Buttons.LeftStick));
-			gamepad.SetButton(GamepadButtons.RightStick, buttons.HasFlag(Cyclone2Buttons.RightStick));
-			gamepad.SetButton(GamepadButtons.Guide, special.HasFlag(Cyclone2SpecialButtons.Guide));
+			Cyclone2SpecialButtons special = input.RawSpecialButtons;
 			gamepad.SetButton(GamepadButtons.LeftPaddle1, special.HasFlag(Cyclone2SpecialButtons.LeftBackButton));
 			gamepad.SetButton(GamepadButtons.RightPaddle1, special.HasFlag(Cyclone2SpecialButtons.RightBackButton));
 			gamepad.SetButton(GamepadButtons.Misc1, special.HasFlag(Cyclone2SpecialButtons.Capture));
 			gamepad.SetButton(GamepadButtons.Misc2, special.HasFlag(Cyclone2SpecialButtons.MButton));
 
-			// axes
-			gamepad.SetAxis(GamepadAxis.LeftStickX, BitHelpers.ScaleByteToShort(state.LeftStickX));
-			gamepad.SetAxis(GamepadAxis.LeftStickY, BitHelpers.ScaleByteToShort(state.LeftStickY));
-			gamepad.SetAxis(GamepadAxis.RightStickX, BitHelpers.ScaleByteToShort(state.RightStickX));
-			gamepad.SetAxis(GamepadAxis.RightStickY, BitHelpers.ScaleByteToShort(state.RightStickY));
-			gamepad.SetAxis(GamepadAxis.LeftTrigger, BitHelpers.ScaleByteToShort(state.LeftTrigger));
-			gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(state.RightTrigger));
-
 			// gyro
-			long delta = state.Timestamp - (prevSensorTick ?? state.Timestamp);
+			long delta = input.Timestamp - (prevSensorTick ?? input.Timestamp);
 			if (delta < 0) delta += ushort.MaxValue; // wrap
 
 			sensorTicks += delta;
-			prevSensorTick = state.Timestamp;
+			prevSensorTick = input.Timestamp;
 
-			gamepad.GyroPitch = state.GyroX;
-			gamepad.GyroYaw = state.GyroY;
-			gamepad.GyroRoll = state.GyroZ;
-			gamepad.AccelX = state.AccelX;
-			gamepad.AccelY = state.AccelY;
-			gamepad.AccelZ = state.AccelZ;
+			gamepad.GyroPitch = input.GyroX;
+			gamepad.GyroYaw = input.GyroY;
+			gamepad.GyroRoll = input.GyroZ;
+			gamepad.AccelX = input.AccelX;
+			gamepad.AccelY = input.AccelY;
+			gamepad.AccelZ = input.AccelZ;
 			gamepad.ImuTimestampUs = (sensorTicks * 16) / 3; // 5.33us units;
-
-			gamepad.Update();
-		}
-
-		private void SendRumble(byte rumbleLeft, byte rumbleRight)
-		{
-			Span<byte> buffer = stackalloc byte[ReportSize];
-			buffer[0] = ReportIdOutput;
-
-			Unsafe.As<byte, Cyclone2RumbleCommand>(ref buffer[1]) = new()
-			{
-				RumbleLeft = rumbleLeft,
-				RumbleRight = rumbleRight,
-			};
-
-			device.Write(buffer);
 		}
 
 		private bool SendHeartbeat()
 		{
-			int written = device.Write(PacketHeartbeat);
-			if (written < PacketHeartbeat.Length) return false;
+			if (!hid.Write(PacketHeartbeat)) return false;
 
 			prevHeartbeatTime = Stopwatch.GetTimestamp();
 			return true;
@@ -206,6 +179,8 @@ public class Cyclone2Driver : IDriver
 
 		public void Dispose()
 		{
+			xusb.Dispose();
+			hid.Dispose();
 			device.Dispose();
 		}
 	}

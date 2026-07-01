@@ -58,9 +58,13 @@ public unsafe class LibUsbDeviceHandle : IDisposable
 		return error == LIBUSB_SUCCESS ? true : throw new LibUsbException(error);
 	}
 
-	public void SetAutoDetachKernelDriver(bool enable)
+	public bool SetAutoDetachKernelDriver(bool enable)
 	{
-		LibUsbException.ThrowIfError(libusb_set_auto_detach_kernel_driver(handle, enable ? 1 : 0));
+		libusb_error error = (libusb_error)libusb_set_auto_detach_kernel_driver(handle, enable ? 1 : 0);
+		if (error == LIBUSB_ERROR_NOT_SUPPORTED) return false;
+
+		LibUsbException.ThrowIfError(error);
+		return true;
 	}
 
 	public bool SupportsRawIo(byte endpoint)
