@@ -54,7 +54,11 @@
           options.services.infract = {
             enable = lib.mkEnableOption "InFract controller refractor";
 
-            enableRules = lib.mkEnableOption "Enable udev rules for infract controllers";
+            enableRules = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Enable udev rules for infract controllers";
+            };
 
             package = lib.mkOption {
               type = lib.types.package;
@@ -106,8 +110,8 @@
               # UHID access
               KERNEL=="uhid", GROUP="input", MODE="0660", TAG+="uaccess"
 
-              # GameSir HID access
-              SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3537", GROUP="input", MODE="0660", TAG+="uaccess"
+              # GameSir access
+              SUBSYSTEM=="usb", ATTRS{idVendor}=="3537", GROUP="input", MODE="0666", TAG+="uaccess"
             '';
 
             systemd.services.infract = {
@@ -132,6 +136,8 @@
                   "/dev/uinput rw"
                   "char-hidraw rw"
                   "char-input rw"
+                  "char-usb_device rw"
+
                 ];
 
                 StateDirectory = "infract";
