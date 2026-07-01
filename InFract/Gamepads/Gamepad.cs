@@ -30,6 +30,9 @@ public class Gamepad
 	{
 		Descriptor = descriptor;
 		touches = new GamepadTouch[descriptor.TouchpadCount * descriptor.TouchpadFingerCount];
+		
+		SetAxis(GamepadAxis.LeftTrigger, short.MinValue);
+		SetAxis(GamepadAxis.RightTrigger, short.MinValue);
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
