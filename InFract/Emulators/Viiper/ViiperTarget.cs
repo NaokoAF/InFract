@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using Viiper.Client;
 
 namespace InFract.Emulators.Viiper;
@@ -12,6 +11,7 @@ public abstract class ViiperTarget<TInput, TOutput> : IDisposable
 	private readonly ManualResetEventSlim manualReset = new(false);
 	private readonly ConcurrentQueue<TInput> inputQueue = new();
 	private readonly byte[] inputBuffer = new byte[Unsafe.SizeOf<TInput>()];
+	private readonly byte[] outputBuffer = new byte[Unsafe.SizeOf<TOutput>()];
 
 	protected ViiperTarget(ViiperDevice device)
 	{
@@ -21,57 +21,57 @@ public abstract class ViiperTarget<TInput, TOutput> : IDisposable
 	}
 
 	public Task StartAsync() => Task.Factory.StartNew(
-		() => Worker(cts.Token),
+		WriteLoop,
 		cts.Token,
 		TaskCreationOptions.LongRunning,
 		TaskScheduler.Default
 	);
 
+	protected abstract void OnOutputReceived(TOutput output);
+	
 	protected void EnqueueInput(in TInput input)
 	{
 		inputQueue.Enqueue(input);
 		manualReset.Set();
 	}
 
-	protected virtual void OnOutputReceived(TOutput output)
+	private async Task WriteLoop()
 	{
-	}
-
-	private async Task Worker(CancellationToken token)
-	{
-		while (!token.IsCancellationRequested)
+		while (!cts.Token.IsCancellationRequested)
 		{
 			manualReset.Reset();
 
-			while (inputQueue.TryDequeue(out TInput? input))
+			while (inputQueue.TryDequeue(out TInput? input) && !cts.Token.IsCancellationRequested)
 			{
 				Unsafe.As<byte, TInput>(ref inputBuffer[0]) = input;
-				await device.SendRawAsync(inputBuffer, token);
+				await device.SendRawAsync(inputBuffer, cts.Token);
 			}
 
-			manualReset.Wait(token);
+			manualReset.Wait(cts.Token);
 		}
 	}
 
 	private void OnDeviceDisconnect() => cts.Cancel();
 
-	private Task OnDeviceOutput(Stream stream)
+	private async Task OnDeviceOutput(Stream stream)
 	{
-		Unsafe.SkipInit(out TOutput output);
-		Span<byte> bytes = MemoryMarshal.CreateSpan(
-			ref Unsafe.As<TOutput, byte>(ref output),
-			Unsafe.SizeOf<TOutput>()
-		);
-		stream.ReadExactly(bytes);
-
+		await stream.ReadExactlyAsync(outputBuffer, cts.Token);
+		
+		ref TOutput output = ref Unsafe.As<byte, TOutput>(ref outputBuffer[0]);
 		OnOutputReceived(output);
-		return Task.CompletedTask;
 	}
 
 	public void Dispose()
 	{
+		device.OnDisconnect = null;
+		device.OnOutput = null;
+		
 		cts.Cancel();
 		cts.Dispose();
+		inputQueue.Clear();
+		manualReset.Set();
+		manualReset.Dispose();
+		
 		device.Dispose();
 	}
 }
