@@ -115,18 +115,18 @@ public class DriverManager : IDisposable
 
 	private void Close(IDriverDevice driver)
 	{
+		logger.LogInformation($"Driver closed: {driver.Gamepad.Descriptor.Name}");
+		DeviceClosed?.Invoke(driver);
+		
 		LibUsbDevice usbDevice = driver.Device.Device;
-		(byte, byte) identifier = (usbDevice.BusNumber, usbDevice.DeviceAddress);
-
 		lock (lockObject)
 		{
-			logger.LogInformation($"Driver closed: {driver.Gamepad.Descriptor.Name}");
-			DeviceClosed?.Invoke(driver);
-
-			deviceMap.Remove(identifier);
+			deviceMap.Remove((usbDevice.BusNumber, usbDevice.DeviceAddress));
 			devices.Remove(driver);
-			driver.Dispose();
 		}
+
+		driver.Close();
+		driver.Dispose();
 	}
 
 	private bool TryGetDriverForDevice(LibUsbDevice device, [NotNullWhen(true)] out IDriver? driver)
@@ -149,7 +149,7 @@ public class DriverManager : IDisposable
 		if (hotplugCallbackHandle != null) libUsb.DeregisterHotPlugCallback(hotplugCallbackHandle.Value);
 
 		lock (lockObject)
-			for (int i = devices.Count - 1; i >= 0; i--)
-				Close(devices[i]);
+			foreach (var device in devices)
+				device.Dispose();
 	}
 }

@@ -85,6 +85,12 @@ public class TegenariaDriver : IDriver
 			hid.Open();
 		}
 
+		public void Close()
+		{
+			xusb.Close();
+			hid.Close();
+		}
+
 		public void Update()
 		{
 			if (rumbleLeft != gamepad.RumbleLeft || rumbleRight != gamepad.RumbleRight)

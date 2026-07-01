@@ -94,6 +94,12 @@ public class Cyclone2Driver : IDriver
 			hid.Open();
 		}
 
+		public void Close()
+		{
+			xusb.Close();
+			hid.Close();
+		}
+
 		public void Update()
 		{
 			// periodically send heartbeat to enable hid mode
