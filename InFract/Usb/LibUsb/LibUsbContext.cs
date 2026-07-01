@@ -88,7 +88,7 @@ public unsafe class LibUsbContext : IDisposable
 	}
 
 	[UnmanagedCallersOnly]
-	private static bool HotPlugCallbackWrapper(
+	private static int HotPlugCallbackWrapper(
 		libusb_context* contextPtr,
 		libusb_device* devicePtr,
 		libusb_hotplug_event eventType,
@@ -97,10 +97,10 @@ public unsafe class LibUsbContext : IDisposable
 	{
 		GCHandle callbackHandle = GCHandle.FromIntPtr(userData);
 		LibUsbHotPlugCallback? callback = callbackHandle.Target as LibUsbHotPlugCallback;
-		if (callback == null) return true;
+		if (callback == null) return 1;
 
 		LibUsbDevice device = new(devicePtr);
-		return callback(device, eventType);
+		return callback(device, eventType) ? 1 : 0;
 	}
 
 	private void ReleaseUnmanagedResources()

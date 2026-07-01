@@ -32,7 +32,7 @@ public static unsafe partial class LibUsbNative
 		int vendor_id,
 		int product_id,
 		int dev_class,
-		delegate* unmanaged<libusb_context*, libusb_device*, libusb_hotplug_event, nint, bool> cb_fn,
+		delegate* unmanaged<libusb_context*, libusb_device*, libusb_hotplug_event, nint, int> cb_fn,
 		nint user_data,
 		libusb_hotplug_callback_handle* callback_handle
 	);
