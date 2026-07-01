@@ -3,6 +3,8 @@ using InFract.Drivers;
 using InFract.Drivers.GameSir;
 using InFract.Gamepads;
 using InFract.Platforms;
+using InFract.Platforms.Linux;
+using InFract.Platforms.Windows;
 using InFract.Usb.LibUsb;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
