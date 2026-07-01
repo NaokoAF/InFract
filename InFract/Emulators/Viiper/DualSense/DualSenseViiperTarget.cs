@@ -15,7 +15,7 @@ public class DualSenseViiperTarget : ViiperTarget<ViiperDualSenseInput, ViiperDu
 	internal DualSenseViiperTarget(ViiperDevice device, bool edge, GamepadDescriptor descriptor) : base(device)
 	{
 		IsEdge = edge;
-		
+
 		// gyro calibration. scale for gamepad descriptor
 		SonyGyroCalibrationReport calibration = ViiperGyroCalibration;
 		if (descriptor.HasGyro)
@@ -35,7 +35,7 @@ public class DualSenseViiperTarget : ViiperTarget<ViiperDualSenseInput, ViiperDu
 			calibration.AccelZPlus = (short)(accelScale * calibration.AccelZPlus);
 			calibration.AccelZMinus = (short)(accelScale * calibration.AccelZMinus);
 		}
-		
+
 		GyroCalibration = calibration;
 	}
 
@@ -95,7 +95,7 @@ public class DualSenseViiperTarget : ViiperTarget<ViiperDualSenseInput, ViiperDu
 		effects.LightbarBlue = output.LedBlue;
 		effects.LightbarBrightness = byte.MaxValue;
 	}
-	
+
 	// https://github.com/Alia5/VIIPER/blob/88f66f1ed0c3716c78f810d92b1924112093f896/device/dualsense/device.go#L292-L297
 	private static readonly SonyGyroCalibrationReport ViiperGyroCalibration = new()
 	{
