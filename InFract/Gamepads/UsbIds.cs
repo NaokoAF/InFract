@@ -5,6 +5,8 @@ public static class UsbIds
 	public const ushort GameSirVendorId = 0x3537;
 	public const ushort GameSirCyclone2WiredProductId = 0x1053;
 	public const ushort GameSirCyclone2WirelessProductId = 0x100b;
+	public const ushort GameSirTegenariaXUsbProductId = 0x1093;
+	public const ushort GameSirTegenariaHidProductId = 0x1094;
 	
 	public const ushort SInputGenericVendorId = 0x2e8a;
 	public const ushort SInputGenericProductId = 0x10c6;

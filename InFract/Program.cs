@@ -26,6 +26,7 @@ else
 
 // drivers
 collection.AddSingleton<IDriver, Cyclone2Driver>();
+collection.AddSingleton<IDriver, TegenariaDriver>();
 
 // app
 collection.AddSingleton<LibUsbContext>();
