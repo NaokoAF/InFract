@@ -3,4 +3,4 @@ obj/
 .vs/
 .idea/
 *.user
-./result
+nix/result

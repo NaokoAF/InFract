@@ -71,8 +71,6 @@ To just run it:
 ```sh
 nix run github:NaokoAF/InFract?dir=nix#infract
 ```
-> [!NOTE]
-> Might not hide the controller, it's recommended to use the module instead.
 
 Example NixOS flake configuration:
 
@@ -91,6 +89,7 @@ Example NixOS flake configuration:
         {
           services.infract = {
             enable = true;
+            enableRules = true;
             environment = {
               INFRACT_CONVERTER = "SINPUT";
             };
