@@ -19,18 +19,11 @@ public enum libusb_hotplug_flag
 	LIBUSB_HOTPLUG_ENUMERATE = 1 << 0,
 }
 
-public unsafe delegate bool libusb_hotplug_callback_fn(
-	libusb_context* ctx,
-	libusb_device* device,
-	libusb_hotplug_event @event,
-	nint user_data
-);
-
 public static unsafe partial class LibUsbNative
 {
 	public const int LIBUSB_HOTPLUG_NO_FLAGS = 0;
 	public const int LIBUSB_HOTPLUG_MATCH_ANY = -1;
-	
+
 	[LibraryImport(LibraryName)]
 	public static partial int libusb_hotplug_register_callback(
 		libusb_context* ctx,
@@ -39,7 +32,7 @@ public static unsafe partial class LibUsbNative
 		int vendor_id,
 		int product_id,
 		int dev_class,
-		libusb_hotplug_callback_fn cb_fn,
+		delegate* unmanaged<libusb_context*, libusb_device*, libusb_hotplug_event, nint, bool> cb_fn,
 		nint user_data,
 		libusb_hotplug_callback_handle* callback_handle
 	);

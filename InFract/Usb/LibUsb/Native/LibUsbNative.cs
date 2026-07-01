@@ -33,8 +33,6 @@ public enum libusb_option
 	LIBUSB_OPTION_MAX = 4,
 }
 
-public unsafe delegate void libusb_log_cb(libusb_context* ctx, libusb_log_level level, byte* str);
-
 public static unsafe partial class LibUsbNative
 {
 	private const string LibraryName = "libusb-1.0.so.0";
@@ -43,7 +41,11 @@ public static unsafe partial class LibUsbNative
 	public static partial void libusb_set_debug(libusb_context* ctx, libusb_log_level level);
 
 	[LibraryImport(LibraryName)]
-	public static partial void libusb_set_log_cb(libusb_context* ctx, libusb_log_cb cb, int mode);
+	public static partial void libusb_set_log_cb(
+		libusb_context* ctx,
+		delegate* unmanaged<libusb_context*, libusb_log_level, byte*, void> cb,
+		int mode
+	);
 
 	[LibraryImport(LibraryName)]
 	public static partial int libusb_init(libusb_context** ctx);

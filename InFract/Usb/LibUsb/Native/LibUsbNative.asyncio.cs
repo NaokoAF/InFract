@@ -70,8 +70,6 @@ public unsafe struct libusb_transfer
 	// public libusb_iso_packet_descriptor iso_packet_desc[LIBUSB_FLEXIBLE_ARRAY];
 }
 
-public unsafe delegate void libusb_transfer_cb_fn(libusb_transfer* transfer);
-
 public static unsafe partial class LibUsbNative
 {
 	[LibraryImport(LibraryName)]

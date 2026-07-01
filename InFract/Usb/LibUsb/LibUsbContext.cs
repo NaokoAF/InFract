@@ -62,7 +62,7 @@ public unsafe class LibUsbContext : IDisposable
 				LIBUSB_HOTPLUG_MATCH_ANY,
 				LIBUSB_HOTPLUG_MATCH_ANY,
 				LIBUSB_HOTPLUG_MATCH_ANY,
-				HotPlugCallbackWrapper,
+				&HotPlugCallbackWrapper,
 				(nint)GCHandle.Alloc(callback),
 				&handle
 			)
@@ -87,7 +87,8 @@ public unsafe class LibUsbContext : IDisposable
 		tv.tv_usec = ((nint)timeout % 1000) * 1000;
 	}
 
-	private bool HotPlugCallbackWrapper(
+	[UnmanagedCallersOnly]
+	private static bool HotPlugCallbackWrapper(
 		libusb_context* contextPtr,
 		libusb_device* devicePtr,
 		libusb_hotplug_event eventType,
