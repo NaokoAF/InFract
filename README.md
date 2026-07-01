@@ -89,7 +89,7 @@ Example NixOS flake configuration:
         {
           services.infract = {
             enable = true;
-            extraRules = true;
+            enableRules = true;
             environment = {
               INFRACT_CONVERTER = "SINPUT";
             };
