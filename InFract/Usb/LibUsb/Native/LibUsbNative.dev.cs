@@ -28,6 +28,9 @@ public static unsafe partial class LibUsbNative
 	public static partial void libusb_free_device_list(libusb_device** list, int unref_devices);
 
 	[LibraryImport(LibraryName)]
+	public static partial ulong libusb_get_session_data(libusb_device* dev);
+
+	[LibraryImport(LibraryName)]
 	public static partial byte libusb_get_bus_number(libusb_device* dev);
 
 	[LibraryImport(LibraryName)]

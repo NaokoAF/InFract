@@ -6,6 +6,7 @@ namespace InFract.Usb.LibUsb;
 
 public unsafe class LibUsbDevice : IDisposable
 {
+	public ulong SessionData => libusb_get_session_data(device);
 	public byte BusNumber => libusb_get_bus_number(device);
 	public byte PortNumber => libusb_get_port_number(device);
 	public byte DeviceAddress => libusb_get_device_address(device);
