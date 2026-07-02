@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using InFract.Platforms.Linux.Native;
-using Tmds.Linux;
+using static InFract.Platforms.Linux.Native.LibCNative;
 
 namespace InFract.Platforms.Linux.UHid;
 
@@ -22,11 +22,11 @@ public abstract unsafe class UHidDevice : IDisposable
 	)
 	{
 		// open file descriptor
-		fixed (byte* uhidPathPtr = UHidPath) fd = LibC.open(uhidPathPtr, LibC.O_RDWR | LibC.O_NONBLOCK);
+		fixed (byte* uhidPathPtr = UHidPath) fd = open(uhidPathPtr, O_RDWR | O_NONBLOCK, 0);
 
 		if (fd < 0) throw new Exception(Marshal.GetLastPInvokeErrorMessage());
 
-		pollfd = new() { fd = fd, events = LibC.POLLIN };
+		pollfd = new() { fd = fd, events = POLLIN };
 
 		// create device
 		uhid_event uhidEvent = new();
@@ -81,64 +81,65 @@ public abstract unsafe class UHidDevice : IDisposable
 
 	public void Poll(int timeout = 0)
 	{
-		while ((LibC.poll((pollfd*)Unsafe.AsPointer(ref Unsafe.AsRef(in pollfd)), 1, timeout)) > 0)
+		pollfd pollfd = this.pollfd;
+		while (poll((pollfd*)Unsafe.AsPointer(in pollfd), 1, timeout) > 0)
 		{
 			// read from file descriptor
 			Unsafe.SkipInit(out uhid_event uhidEvent);
-			ssize_t readBytes = LibC.read(fd, &uhidEvent, sizeof(uhid_event));
+			nint readBytes = read(fd, &uhidEvent, (nuint)sizeof(uhid_event));
 			if (readBytes != sizeof(uhid_event))
 			{
 				// -1 means an error. EAGAIN occurs if the read would block.
-				if (readBytes == -1 && (Marshal.GetLastPInvokeError()) != LibC.EAGAIN)
+				if (readBytes == -1 && Marshal.GetLastPInvokeError() != (int)EAGAIN)
 					throw new Exception($"Failed to read from UHid: {Marshal.GetLastPInvokeErrorMessage()}");
 
 				// we read a partial event?
 				if (readBytes > 0) throw new Exception($"Partial UHid read: {readBytes}");
+				
+				continue;
 			}
-			else
+			
+			ReadOnlySpan<byte> data;
+			switch ((uhid_event_type)uhidEvent.type)
 			{
-				ReadOnlySpan<byte> data;
-				switch ((uhid_event_type)uhidEvent.type)
-				{
-					case uhid_event_type.UHID_OUTPUT:
-						data = MemoryMarshal.CreateReadOnlySpan(ref uhidEvent.output.data.e0, uhidEvent.output.size);
-						OnOutputReport(data);
-						break;
-					case uhid_event_type.UHID_GET_REPORT:
-						Unsafe.SkipInit(out uhid_get_report_reply_req getReportReply);
-						getReportReply.id = uhidEvent.get_report.id;
+				case uhid_event_type.UHID_OUTPUT:
+					data = MemoryMarshal.CreateReadOnlySpan(ref uhidEvent.output.data.e0, uhidEvent.output.size);
+					OnOutputReport(data);
+					break;
+				case uhid_event_type.UHID_GET_REPORT:
+					Unsafe.SkipInit(out uhid_get_report_reply_req getReportReply);
+					getReportReply.id = uhidEvent.get_report.id;
 
-						data = OnGetReport(uhidEvent.get_report.rnum);
-						data.CopyTo(getReportReply.data);
-						getReportReply.err = (ushort)(data.Length > 0 ? 0 : -LibC.EINVAL);
-						getReportReply.size = (ushort)data.Length;
+					data = OnGetReport(uhidEvent.get_report.rnum);
+					data.CopyTo(getReportReply.data);
+					getReportReply.err = (ushort)(data.Length > 0 ? 0 : -EINVAL);
+					getReportReply.size = (ushort)data.Length;
 
-						Write(
-							new()
+					Write(
+						new()
+						{
+							type = (uint)uhid_event_type.UHID_GET_REPORT_REPLY,
+							get_report_reply = getReportReply,
+						}
+					);
+					break;
+				case uhid_event_type.UHID_SET_REPORT:
+					data = MemoryMarshal.CreateReadOnlySpan(ref uhidEvent.set_report.data.e0, uhidEvent.set_report.size);
+
+					Write(
+						new()
+						{
+							type = (uint)uhid_event_type.UHID_SET_REPORT_REPLY,
+							set_report_reply = new()
 							{
-								type = (uint)uhid_event_type.UHID_GET_REPORT_REPLY,
-								get_report_reply = getReportReply,
-							}
-						);
-						break;
-					case uhid_event_type.UHID_SET_REPORT:
-						data = MemoryMarshal.CreateReadOnlySpan(ref uhidEvent.set_report.data.e0, uhidEvent.set_report.size);
-
-						Write(
-							new()
-							{
-								type = (uint)uhid_event_type.UHID_SET_REPORT_REPLY,
-								set_report_reply = new()
-								{
-									id = uhidEvent.set_report.id,
-									err = (ushort)(OnSetReport(uhidEvent.set_report.rnum, data)
-										? 0
-										: -LibC.EINVAL),
-								},
-							}
-						);
-						break;
-				}
+								id = uhidEvent.set_report.id,
+								err = (ushort)(OnSetReport(uhidEvent.set_report.rnum, data)
+									? 0
+									: -EINVAL),
+							},
+						}
+					);
+					break;
 			}
 		}
 	}
@@ -146,13 +147,13 @@ public abstract unsafe class UHidDevice : IDisposable
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private void Write(in uhid_event uhidEvent)
 	{
-		ssize_t written = LibC.write(fd, Unsafe.AsPointer(in uhidEvent), Unsafe.SizeOf<uhid_event>());
-		if (written != Unsafe.SizeOf<uhid_event>()) throw new Exception(Marshal.GetLastPInvokeErrorMessage());
+		nint written = write(fd, Unsafe.AsPointer(in uhidEvent), (nuint)sizeof(uhid_event));
+		if (written != sizeof(uhid_event)) throw new Exception(Marshal.GetLastPInvokeErrorMessage());
 	}
 
 	protected virtual void Dispose(bool disposing)
 	{
-		LibC.close(fd);
+		close(fd);
 	}
 
 	public void Dispose()
