@@ -21,6 +21,16 @@ public unsafe class LibUsbDevice : IDisposable
 		libusb_ref_device(device);
 	}
 
+	public byte[] GetPortNumbers()
+	{
+		Span<byte> ports = stackalloc byte[8];
+		int count;
+		fixed (byte* portsPtr = ports) count = libusb_get_port_numbers(device, portsPtr, ports.Length);
+		LibUsbException.ThrowIfError(count);
+
+		return ports.Slice(0, count).ToArray();
+	}
+
 	public LibUsbDeviceDescriptor GetDeviceDescriptor()
 	{
 		libusb_device_descriptor descriptor;
