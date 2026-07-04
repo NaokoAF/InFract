@@ -2,6 +2,7 @@ using InFract.Gamepads;
 using InFract.Platforms.Windows.Vigem;
 using InFract.Platforms.Windows.Vigem.Native;
 using InFract.Platforms.Windows.Viiper;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace InFract.Platforms.Windows;
@@ -20,6 +21,11 @@ public class WindowsPlatform : IPlatform
 	{
 		this.logger = logger;
 		this.hints = hints;
+	}
+	
+	public static void AddServices(IServiceCollection collection)
+	{
+		collection.AddSingleton<IPlatform, WindowsPlatform>();
 	}
 
 	public async ValueTask StartAsync()

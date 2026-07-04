@@ -1,5 +1,6 @@
 using InFract.Gamepads;
 using InFract.Platforms.Linux.UHid;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace InFract.Platforms.Linux;
@@ -16,6 +17,11 @@ public class LinuxPlatform : IPlatform
 	{
 		this.logger = logger;
 		this.hints = hints;
+	}
+
+	public static void AddServices(IServiceCollection collection)
+	{
+		collection.AddSingleton<IPlatform, LinuxPlatform>();
 	}
 
 	public ValueTask StartAsync() => ValueTask.CompletedTask;

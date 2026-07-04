@@ -19,9 +19,9 @@ collection.AddLogging(x =>
 
 // operating system
 if (OperatingSystem.IsLinux())
-	collection.AddSingleton<IPlatform, LinuxPlatform>();
+	LinuxPlatform.AddServices(collection);
 else if (OperatingSystem.IsWindows())
-	collection.AddSingleton<IPlatform, WindowsPlatform>();
+	WindowsPlatform.AddServices(collection);
 else
 	throw new NotSupportedException("Unsupported operating system");
 
