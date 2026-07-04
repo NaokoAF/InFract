@@ -2,7 +2,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using InFract.Platforms.Linux.Native;
-using static InFract.Platforms.Linux.Native.LibCNative;
+using InFract.Platforms.Linux.Native.LibC;
+using static InFract.Platforms.Linux.Native.LibC.LibC;
 
 namespace InFract.Platforms.Linux.UHid;
 
@@ -89,13 +90,12 @@ public abstract unsafe class UHidDevice : IDisposable
 			nint readBytes = read(fd, &uhidEvent, (nuint)sizeof(uhid_event));
 			if (readBytes != sizeof(uhid_event))
 			{
-				// -1 means an error. EAGAIN occurs if the read would block.
-				if (readBytes == -1 && Marshal.GetLastPInvokeError() != (int)EAGAIN)
-					throw new Exception($"Failed to read from UHid: {Marshal.GetLastPInvokeErrorMessage()}");
-
-				// we read a partial event?
-				if (readBytes > 0) throw new Exception($"Partial UHid read: {readBytes}");
-				
+				if (readBytes == -1)
+				{
+					int error = Marshal.GetLastPInvokeError();
+					if(error != EWOULDBLOCK)
+						throw new ErrnoException(error, "Failed to read from UHid");
+				}
 				continue;
 			}
 			
