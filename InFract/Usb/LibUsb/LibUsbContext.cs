@@ -17,12 +17,13 @@ public unsafe class LibUsbContext : IDisposable
 		this.context = context;
 	}
 
-	public void HandleEvents(uint timeout)
+	public bool HandleEvents(uint timeout)
 	{
 		ToTimeVal(timeout, out timeval tv);
 		libusb_error err = (libusb_error)libusb_handle_events_timeout(context, &tv);
-		if (err == LIBUSB_ERROR_INTERRUPTED) return;
+		if (err == LIBUSB_ERROR_INTERRUPTED) return false;
 		LibUsbException.ThrowIfError(err);
+		return true;
 	}
 
 	public LibUsbDevice[] GetDeviceList()

@@ -2,7 +2,9 @@ using InFract.Gamepads;
 using InFract.Platforms.Windows.Vigem;
 using InFract.Platforms.Windows.Vigem.Native;
 using InFract.Platforms.Windows.Viiper;
+using InFract.Usb.Hid;
 using InFract.Usb.LibUsb;
+using InFract.Usb.XUsb;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -105,6 +107,16 @@ public class WindowsPlatform : IPlatform
 			throw new Exception($"Failed to create converter: {converterId}");
 
 		return converter;
+	}
+
+	public IXUsbInterface OpenXUsb(LibUsbDeviceHandle device, byte interfaceNumber)
+	{
+		return XUsbLibUsbInterface.Open(device, interfaceNumber);
+	}
+	
+	public IHidInterface OpenHid(LibUsbDeviceHandle device, byte interfaceNumber)
+	{
+		return HidLibUsbInterface.Open(device, interfaceNumber);
 	}
 
 	public void Dispose()

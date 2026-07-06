@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using InFract.Gamepads;
 using InFract.Gamepads.GameSir.Cyclone2;
+using InFract.Platforms;
 using InFract.Usb.Hid;
 using InFract.Usb.LibUsb;
 using InFract.Usb.XUsb;
@@ -10,18 +11,20 @@ namespace InFract.Drivers.GameSir;
 
 public class Cyclone2Driver : IDriver
 {
+	private readonly IPlatform platform;
+
+	public Cyclone2Driver(IPlatform platform)
+	{
+		this.platform = platform;
+	}
+
 	public bool IsSupported(LibUsbDevice device, LibUsbDeviceDescriptor descriptor) => descriptor is
 	{
 		IdVendor: UsbIds.GameSirVendorId,
 		IdProduct: UsbIds.GameSirCyclone2WiredProductId or UsbIds.GameSirCyclone2WirelessProductId
 	};
 
-	public IDriverDevice Open(LibUsbDeviceHandle device)
-	{
-		DriverDevice driver = new(device);
-		driver.Open();
-		return driver;
-	}
+	public IDriverDevice Open(LibUsbDeviceHandle device) => new DriverDevice(device, platform);
 
 	private class DriverDevice : IDriverDevice
 	{
@@ -29,8 +32,8 @@ public class Cyclone2Driver : IDriver
 		public Gamepad Gamepad => gamepad;
 
 		private readonly LibUsbDeviceHandle device;
-		private readonly XUsbDriver xusb;
-		private readonly HidDriver hid;
+		private readonly IHidInterface hid;
+		private readonly IXUsbInterface? xusb;
 		private readonly Gamepad gamepad;
 		private long prevHeartbeatTime;
 		private byte rumbleLeft;
@@ -45,12 +48,7 @@ public class Cyclone2Driver : IDriver
 		private const byte ReportIdInputCommands = 0x10;
 
 		private const byte InterfaceNumberXUsb = 0x00;
-		private const byte EndpointXUsbIn = 0x82;
-		private const byte EndpointXUsbOut = 0x02;
-
 		private const byte InterfaceNumberHid = 0x01;
-		private const byte EndpointHidIn = 0x84;
-		private const byte EndpointHidOut = 0x04;
 
 		private static readonly long HeartbeatRate = Stopwatch.Frequency / 2; // 500ms
 		private static ReadOnlySpan<byte> PacketHeartbeat => [ReportIdOutput, (byte)Cyclone2Command.OutHeartbeat];
@@ -74,30 +72,25 @@ public class Cyclone2Driver : IDriver
 			),
 		};
 
-		public DriverDevice(LibUsbDeviceHandle device)
+		public DriverDevice(LibUsbDeviceHandle device, IPlatform platform)
 		{
 			this.device = device;
-			xusb = new(device, InterfaceNumberXUsb, EndpointXUsbIn, EndpointXUsbOut, ReportSizeXUsb, ReportSizeXUsb);
-			xusb.InputReceived += OnXUsbInputReceived;
-
-			hid = new(device, InterfaceNumberHid, EndpointHidIn, EndpointHidOut, ReportSizeHid, ReportSizeHid);
-			hid.InputReceived += OnHidInputReceived;
-
-			gamepad = new(Descriptor);
-		}
-
-		public void Open()
-		{
 			device.SetAutoDetachKernelDriver(true);
 
-			xusb.Open();
-			hid.Open();
-		}
+			hid = platform.OpenHid(device, InterfaceNumberHid);
+			hid.InputReceived += OnHidInputReceived;
 
-		public void Close()
-		{
-			xusb.Close();
-			hid.Close();
+			try
+			{
+				xusb = platform.OpenXUsb(device, InterfaceNumberXUsb);
+				xusb.InputReceived += OnXUsbInputReceived;
+			}
+			catch (Exception e)
+			{
+				xusb = null;
+			}
+
+			gamepad = new(Descriptor);
 		}
 
 		public void Update()
@@ -110,7 +103,7 @@ public class Cyclone2Driver : IDriver
 
 			if (rumbleLeft != gamepad.RumbleLeft || rumbleRight != gamepad.RumbleRight)
 			{
-				if (xusb.Rumble(gamepad.RumbleLeft, gamepad.RumbleRight))
+				if (xusb?.Rumble(gamepad.RumbleLeft, gamepad.RumbleRight) ?? false)
 				{
 					rumbleLeft = gamepad.RumbleLeft;
 					rumbleRight = gamepad.RumbleRight;
@@ -177,16 +170,22 @@ public class Cyclone2Driver : IDriver
 
 		private bool SendHeartbeat()
 		{
-			if (!hid.Write(PacketHeartbeat)) return false;
+			if (hid.Write(PacketHeartbeat) >= 0) return false;
 
 			prevHeartbeatTime = Stopwatch.GetTimestamp();
 			return true;
 		}
 
+		public void Close()
+		{
+			hid.Close();
+			xusb?.Close();
+		}
+
 		public void Dispose()
 		{
-			xusb.Dispose();
 			hid.Dispose();
+			xusb?.Dispose();
 			device.Dispose();
 		}
 	}

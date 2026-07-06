@@ -1,8 +1,12 @@
 using InFract.Gamepads;
+using InFract.Platforms.Linux.HidRaw;
 using InFract.Platforms.Linux.UHid;
+using InFract.Usb.Hid;
 using InFract.Usb.LibUsb;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using InFract.Platforms.Linux.Systemd;
+using InFract.Usb.XUsb;
 
 namespace InFract.Platforms.Linux;
 
@@ -10,21 +14,27 @@ public class LinuxPlatform : IPlatform
 {
 	private readonly ILogger<LinuxPlatform> logger;
 	private readonly Hints hints;
-	private readonly UHidEmulator uhid = new();
 	private readonly LibUsbContext libUsb;
+	private readonly HidRawContext hidRaw;
+	private readonly UHidEmulator uhid;
+	private readonly ManualResetEventSlim manualReset = new(false);
+	private readonly CancellationTokenSource cts = new();
 
+	private const int PollTimeout = 500;
 	private const string DefaultConverter = "dualsense";
 
 	public LinuxPlatform(
 		ILogger<LinuxPlatform> logger,
 		Hints hints,
 		LibUsbContext libUsb,
+		HidRawContext hidRaw,
 		UHidEmulator uhid
 	)
 	{
 		this.logger = logger;
 		this.hints = hints;
 		this.libUsb = libUsb;
+		this.hidRaw = hidRaw;
 		this.uhid = uhid;
 	}
 
@@ -32,13 +42,32 @@ public class LinuxPlatform : IPlatform
 	{
 		collection.AddSingleton<IPlatform, LinuxPlatform>();
 		collection.AddSingleton<UHidEmulator>();
+		collection.AddSingleton<HidRawContext>();
 	}
 
-	public ValueTask StartAsync() => ValueTask.CompletedTask;
+	public ValueTask StartAsync()
+	{
+		Task.Factory.StartNew(
+			LibUsbLoop,
+			cts.Token,
+			TaskCreationOptions.LongRunning,
+			TaskScheduler.Default
+		);
+		
+		Task.Factory.StartNew(
+			HidRawLoop,
+			cts.Token,
+			TaskCreationOptions.LongRunning,
+			TaskScheduler.Default
+		);
+		
+		return ValueTask.CompletedTask;
+	}
 
 	public void Poll()
 	{
-		libUsb.HandleEvents(PollTimeout);
+		manualReset.Reset();
+		manualReset.Wait(PollTimeout, cts.Token);
 	}
 
 	public IGamepadConverter CreateConverter(Gamepad gamepad)
@@ -52,6 +81,48 @@ public class LinuxPlatform : IPlatform
 			throw new Exception($"Failed to create converter: {converterId}");
 
 		return converter;
+	}
+
+	public IXUsbInterface OpenXUsb(LibUsbDeviceHandle device, byte interfaceNumber)
+	{
+		return XUsbLibUsbInterface.Open(device, interfaceNumber);
+	}
+
+	public IHidInterface OpenHid(LibUsbDeviceHandle device, byte interfaceNumber)
+	{
+		// get device data through systemd
+		string sysName = $"{device.Device.BusNumber}-{string.Join('.', device.Device.GetPortNumbers())}";
+		using SystemdDevice root = SystemdDevice.FromSubSystemSysName("usb"u8, sysName);
+
+		// search for hidraw interfaces
+		using var enumerator = root.EnumerateChildren().MatchSubSystem("hidraw"u8);
+		foreach (var child in enumerator.GetDevices())
+		{
+			string path = child.DevName.ToString();
+			return hidRaw.Open(path);
+		}
+
+		throw new InvalidOperationException("HIDRAW interface not found");
+	}
+
+	private void LibUsbLoop()
+	{
+		while (!cts.Token.IsCancellationRequested)
+		{
+			if (!libUsb.HandleEvents(PollTimeout)) continue;
+			
+			manualReset.Set();
+		}
+	}
+
+	private void HidRawLoop()
+	{
+		while (!cts.Token.IsCancellationRequested)
+		{
+			if (!hidRaw.Poll(PollTimeout)) continue;
+			
+			manualReset.Set();
+		}
 	}
 
 	public void Dispose()

@@ -11,7 +11,7 @@ using static InFract.Usb.LibUsb.Native.libusb_transfer_status;
 
 namespace InFract.Usb.XUsb;
 
-public unsafe class XUsbDriver : IDisposable
+public unsafe class XUsbLibUsbInterface : IXUsbInterface
 {
 	public event Action<XUsbInputReport>? InputReceived;
 
@@ -35,7 +35,7 @@ public unsafe class XUsbDriver : IDisposable
 	private const int ReportIdControlLed = 0x01;
 	private const int ReportIdControlMasterRumble = 0x02;
 
-	public XUsbDriver(
+	public XUsbLibUsbInterface(
 		LibUsbDeviceHandle handle,
 		byte interfaceNumber,
 		byte endpointIn,
@@ -56,10 +56,7 @@ public unsafe class XUsbDriver : IDisposable
 		rumbleTransfer = LibUsbTransfer.Allocate(0, endpointOutSize);
 		rumbleTransfer.UserData = gcHandle;
 		rumbleTransfer.FillInterrupt(handle, endpointOut, 100);
-	}
-
-	public void Open()
-	{
+		
 		handle.ClaimInterface(interfaceNumber);
 		inputTransfer.Submit();
 	}
@@ -103,7 +100,7 @@ public unsafe class XUsbDriver : IDisposable
 		byte size = buffer[1];
 		if (transfer.ReadLength < size) return;
 
-		XUsbDriver self = (XUsbDriver)GCHandle.FromIntPtr(transfer.UserData).Target!;
+		XUsbLibUsbInterface self = (XUsbLibUsbInterface)GCHandle.FromIntPtr(transfer.UserData).Target!;
 		switch (reportId)
 		{
 			case ReportIdStateInput:
@@ -115,7 +112,7 @@ public unsafe class XUsbDriver : IDisposable
 		}
 	}
 
-	public static IEnumerable<XUsbDriver> TryOpen(LibUsbDeviceHandle handle)
+	public static XUsbLibUsbInterface Open(LibUsbDeviceHandle handle, byte interfaceNumber)
 	{
 		using LibUsbConfigDescriptor config = handle.Device.GetActiveConfigDescriptor();
 		foreach (var interfaces in config.Interfaces)
@@ -123,6 +120,7 @@ public unsafe class XUsbDriver : IDisposable
 			if (interfaces.Length != 1) continue; // skip interfaces with alt settings
 
 			LibUsbInterfaceDescriptor itf = interfaces[0];
+			if (itf.InterfaceNumber != interfaceNumber) continue;
 			if (itf.Endpoints.Length < 2) continue; // XUSB must have at least 2 endpoints
 
 			if (itf.InterfaceClass != UsbClass) continue;
@@ -157,7 +155,7 @@ public unsafe class XUsbDriver : IDisposable
 
 			if (endpointIn == null || endpointOut == null) continue;
 
-			yield return new(
+			return new(
 				handle,
 				itf.InterfaceNumber,
 				endpointIn.EndpointAddress,
@@ -166,6 +164,8 @@ public unsafe class XUsbDriver : IDisposable
 				endpointOut.MaxPacketSize
 			);
 		}
+
+		throw new InvalidOperationException("No valid XUsb interface");
 	}
 
 	public void Dispose()

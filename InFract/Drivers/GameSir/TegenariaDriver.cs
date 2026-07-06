@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using InFract.Gamepads;
 using InFract.Gamepads.GameSir.Tegenaria;
+using InFract.Platforms;
 using InFract.Usb.Hid;
 using InFract.Usb.LibUsb;
 using InFract.Usb.XUsb;
@@ -9,18 +10,20 @@ namespace InFract.Drivers.GameSir;
 
 public class TegenariaDriver : IDriver
 {
+	private readonly IPlatform platform;
+
+	public TegenariaDriver(IPlatform platform)
+	{
+		this.platform = platform;
+	}
+	
 	public bool IsSupported(LibUsbDevice device, LibUsbDeviceDescriptor descriptor) => descriptor is
 	{
 		IdVendor: UsbIds.GameSirVendorId,
 		IdProduct: UsbIds.GameSirTegenariaXUsbProductId or UsbIds.GameSirTegenariaHidProductId
 	};
 
-	public IDriverDevice Open(LibUsbDeviceHandle device)
-	{
-		DriverDevice driver = new(device);
-		driver.Open();
-		return driver;
-	}
+	public IDriverDevice Open(LibUsbDeviceHandle device) => new DriverDevice(device, platform);
 
 	private class DriverDevice : IDriverDevice
 	{
@@ -28,8 +31,8 @@ public class TegenariaDriver : IDriver
 		public Gamepad Gamepad => gamepad;
 
 		private readonly LibUsbDeviceHandle device;
-		private readonly XUsbDriver xusb;
-		private readonly HidDriver hid;
+		private readonly IHidInterface hid;
+		private readonly IXUsbInterface? xusb;
 		private readonly Gamepad gamepad;
 		private byte rumbleLeft;
 		private byte rumbleRight;
@@ -40,12 +43,7 @@ public class TegenariaDriver : IDriver
 		private const byte ReportIdInput = 0x10;
 
 		private const byte InterfaceNumberXUsb = 0x00;
-		private const byte EndpointXUsbIn = 0x82;
-		private const byte EndpointXUsbOut = 0x02;
-
 		private const byte InterfaceNumberHid = 0x01;
-		private const byte EndpointHidIn = 0x84;
-		private const byte EndpointHidOut = 0x04;
 
 		private const byte CommandIdInput = 0x14;
 
@@ -65,37 +63,32 @@ public class TegenariaDriver : IDriver
 			),
 		};
 
-		public DriverDevice(LibUsbDeviceHandle device)
+		public DriverDevice(LibUsbDeviceHandle device, IPlatform platform)
 		{
 			this.device = device;
-			xusb = new(device, InterfaceNumberXUsb, EndpointXUsbIn, EndpointXUsbOut, ReportSizeXUsb, ReportSizeXUsb);
-			xusb.InputReceived += OnXUsbInputReceived;
-
-			hid = new(device, InterfaceNumberHid, EndpointHidIn, EndpointHidOut, ReportSizeHid, ReportSizeHid);
-			hid.InputReceived += OnHidInputReceived;
-
-			gamepad = new(Descriptor);
-		}
-
-		public void Open()
-		{
 			device.SetAutoDetachKernelDriver(true);
 
-			xusb.Open();
-			hid.Open();
-		}
+			hid = platform.OpenHid(device, InterfaceNumberHid);
+			hid.InputReceived += OnHidInputReceived;
 
-		public void Close()
-		{
-			xusb.Close();
-			hid.Close();
+			try
+			{
+				xusb = platform.OpenXUsb(device, InterfaceNumberXUsb);
+				xusb.InputReceived += OnXUsbInputReceived;
+			}
+			catch (Exception e)
+			{
+				xusb = null;
+			}
+
+			gamepad = new(Descriptor);
 		}
 
 		public void Update()
 		{
 			if (rumbleLeft != gamepad.RumbleLeft || rumbleRight != gamepad.RumbleRight)
 			{
-				if (xusb.Rumble(gamepad.RumbleLeft, gamepad.RumbleRight))
+				if (xusb?.Rumble(gamepad.RumbleLeft, gamepad.RumbleRight) ?? false)
 				{
 					rumbleLeft = gamepad.RumbleLeft;
 					rumbleRight = gamepad.RumbleRight;
@@ -144,10 +137,16 @@ public class TegenariaDriver : IDriver
 			gamepad.SetButton(GamepadButtons.Misc2, special.HasFlag(TegenariaSpecialButtons.MButton));
 		}
 
+		public void Close()
+		{
+			hid.Close();
+			xusb?.Close();
+		}
+		
 		public void Dispose()
 		{
-			xusb.Dispose();
 			hid.Dispose();
+			xusb?.Dispose();
 			device.Dispose();
 		}
 	}

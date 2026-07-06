@@ -1,12 +1,15 @@
 using System.Runtime.InteropServices;
 using InFract.Usb.LibUsb;
 using InFract.Usb.LibUsb.Native;
+using static InFract.Usb.LibUsb.Native.libusb_descriptor_type;
+using static InFract.Usb.LibUsb.Native.libusb_endpoint_direction;
+using static InFract.Usb.LibUsb.Native.libusb_endpoint_transfer_type;
 using static InFract.Usb.LibUsb.Native.libusb_error;
 using static InFract.Usb.LibUsb.Native.libusb_transfer_status;
 
 namespace InFract.Usb.Hid;
 
-public unsafe class HidDriver : IDisposable
+public unsafe class HidLibUsbInterface : IHidInterface
 {
 	public event Action<ReadOnlySpan<byte>>? InputReceived;
 
@@ -17,7 +20,7 @@ public unsafe class HidDriver : IDisposable
 	private LibUsbTransfer outputTransfer;
 	private bool outputLock;
 
-	public HidDriver(
+	public HidLibUsbInterface(
 		LibUsbDeviceHandle handle,
 		byte interfaceNumber,
 		byte endpointIn,
@@ -53,9 +56,9 @@ public unsafe class HidDriver : IDisposable
 		handle.ReleaseInterface(interfaceNumber);
 	}
 
-	public bool Write(ReadOnlySpan<byte> buffer)
+	public int Write(ReadOnlySpan<byte> buffer)
 	{
-		if (!Interlocked.CompareExchange(ref outputLock, true, false)) return false;
+		if (!Interlocked.CompareExchange(ref outputLock, true, false)) return -1;
 
 		// write to transfer buffer
 		outputTransfer.WriteLength = buffer.Length;
@@ -65,11 +68,11 @@ public unsafe class HidDriver : IDisposable
 		if (error == LIBUSB_ERROR_BUSY)
 		{
 			outputLock = false;
-			return false;
+			return -1;
 		}
 
 		LibUsbException.ThrowIfError(error);
-		return true;
+		return buffer.Length;
 	}
 
 	[UnmanagedCallersOnly]
@@ -79,7 +82,7 @@ public unsafe class HidDriver : IDisposable
 		if (transfer.Status != LIBUSB_TRANSFER_CANCELLED) transfer.Submit();
 		if (transfer.Status != LIBUSB_TRANSFER_COMPLETED) return;
 
-		HidDriver self = (HidDriver)GCHandle.FromIntPtr(transfer.UserData).Target!;
+		HidLibUsbInterface self = (HidLibUsbInterface)GCHandle.FromIntPtr(transfer.UserData).Target!;
 		self.InputReceived?.Invoke(transfer.ReadBuffer);
 	}
 
@@ -88,8 +91,53 @@ public unsafe class HidDriver : IDisposable
 	{
 		LibUsbTransfer transfer = new(ptr);
 
-		HidDriver self = (HidDriver)GCHandle.FromIntPtr(transfer.UserData).Target!;
+		HidLibUsbInterface self = (HidLibUsbInterface)GCHandle.FromIntPtr(transfer.UserData).Target!;
 		self.outputLock = false;
+	}
+	
+	public static HidLibUsbInterface Open(LibUsbDeviceHandle handle, byte interfaceNumber)
+	{
+		using LibUsbConfigDescriptor config = handle.Device.GetActiveConfigDescriptor();
+		foreach (var interfaces in config.Interfaces)
+		{
+			if (interfaces.Length != 1) continue; // skip interfaces with alt settings
+
+			LibUsbInterfaceDescriptor itf = interfaces[0];
+			if (itf.InterfaceNumber != interfaceNumber) continue;
+			if (itf.InterfaceClass != libusb_class_code.LIBUSB_CLASS_HID) continue;
+			if (itf.Endpoints.Length < 2) continue;
+
+			// find endpoints
+			LibUsbEndpointDescriptor? endpointIn = null;
+			LibUsbEndpointDescriptor? endpointOut = null;
+			foreach (LibUsbEndpointDescriptor endpoint in itf.Endpoints)
+			{
+				if (endpoint.DescriptorType != LIBUSB_DT_ENDPOINT) continue;
+				if (endpoint.TransferType != LIBUSB_ENDPOINT_TRANSFER_TYPE_INTERRUPT) continue;
+
+				if (endpoint.Direction == LIBUSB_ENDPOINT_IN)
+				{
+					endpointIn ??= endpoint; // use first found endpoint
+				}
+				else
+				{
+					endpointOut ??= endpoint; // use first found endpoint
+				}
+			}
+
+			if (endpointIn == null || endpointOut == null) continue;
+
+			return new(
+				handle,
+				itf.InterfaceNumber,
+				endpointIn.EndpointAddress,
+				endpointOut.EndpointAddress,
+				endpointIn.MaxPacketSize,
+				endpointOut.MaxPacketSize
+			);
+		}
+
+		throw new InvalidOperationException("No valid HID interface");
 	}
 
 	public void Dispose()

@@ -6,7 +6,7 @@ using static InFract.Platforms.Linux.Native.HidRaw;
 
 namespace InFract.Platforms.Linux.HidRaw;
 
-public unsafe class HidRawDevice : IDisposable
+public unsafe class HidRawDevice : IHidInterface
 {
 	public event Action<ReadOnlySpan<byte>>? InputReceived;
 	
