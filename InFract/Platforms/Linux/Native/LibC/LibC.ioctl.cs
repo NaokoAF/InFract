@@ -39,10 +39,10 @@ public static unsafe partial class LibC
 	public static int _IOW_BAD<T>(char type, byte nr) => _IOC(_IOC_WRITE, type, nr, Unsafe.SizeOf<T>());
 	public static int _IOWR_BAD<T>(char type, byte nr) => _IOC(_IOC_READ | _IOC_WRITE, type, nr, Unsafe.SizeOf<T>());
 
-	public static int _IOC_DIR(char nr) => (nr >> _IOC_DIRSHIFT) & _IOC_DIRMASK;
-	public static int _IOC_TYPE(char nr) => (nr >> _IOC_TYPESHIFT) & _IOC_TYPEMASK;
-	public static int _IOC_NR(char nr) => (nr >> _IOC_NRSHIFT) & _IOC_NRMASK;
-	public static int _IOC_SIZE(char nr) => (nr >> _IOC_SIZESHIFT) & _IOC_SIZEMASK;
+	public static int _IOC_DIR(byte nr) => (nr >> _IOC_DIRSHIFT) & _IOC_DIRMASK;
+	public static int _IOC_TYPE(byte nr) => (nr >> _IOC_TYPESHIFT) & _IOC_TYPEMASK;
+	public static int _IOC_NR(byte nr) => (nr >> _IOC_NRSHIFT) & _IOC_NRMASK;
+	public static int _IOC_SIZE(byte nr) => (nr >> _IOC_SIZESHIFT) & _IOC_SIZEMASK;
 
 	public const int IOC_IN = _IOC_WRITE << _IOC_DIRSHIFT;
 	public const int IOC_OUT = _IOC_READ << _IOC_DIRSHIFT;
