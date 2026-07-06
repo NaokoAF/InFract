@@ -2,6 +2,7 @@ using InFract.Gamepads;
 using InFract.Platforms.Windows.Vigem;
 using InFract.Platforms.Windows.Vigem.Native;
 using InFract.Platforms.Windows.Viiper;
+using InFract.Usb.LibUsb;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -11,18 +12,22 @@ public class WindowsPlatform : IPlatform
 {
 	private readonly ILogger<WindowsPlatform> logger;
 	private readonly Hints hints;
+	private readonly LibUsbContext libUsb;
+
 	private VigemEmulator? vigem;
 	private ViiperEmulator? viiper;
 
+	private const int PollTimeout = 500;
 	private const string DefaultVigemConverter = "dualshock4";
 	private const string DefaultViiperConverter = "dualsense";
 
-	public WindowsPlatform(ILogger<WindowsPlatform> logger, Hints hints)
+	public WindowsPlatform(ILogger<WindowsPlatform> logger, Hints hints, LibUsbContext libUsb)
 	{
 		this.logger = logger;
 		this.hints = hints;
+		this.libUsb = libUsb;
 	}
-	
+
 	public static void AddServices(IServiceCollection collection)
 	{
 		collection.AddSingleton<IPlatform, WindowsPlatform>();
@@ -65,6 +70,11 @@ public class WindowsPlatform : IPlatform
 		}
 
 		if (vigem == null && viiper == null) throw new Exception("No input emulator installed!");
+	}
+
+	public void Poll()
+	{
+		libUsb.HandleEvents(PollTimeout);
 	}
 
 	public IGamepadConverter CreateConverter(Gamepad gamepad)

@@ -1,5 +1,6 @@
 using InFract.Drivers;
 using InFract.Gamepads;
+using InFract.Platforms;
 using Microsoft.Extensions.Logging;
 
 namespace InFract;
@@ -8,18 +9,21 @@ public class App
 {
 	private readonly ILogger<App> logger;
 	private readonly Hints hints;
+	private readonly IPlatform platform;
 	private readonly GamepadConverterManager converterManager;
 	private readonly DriverManager driverManager;
 
 	public App(
 		ILogger<App> logger,
 		Hints hints,
+		IPlatform platform,
 		GamepadConverterManager converterManager,
 		DriverManager driverManager
 	)
 	{
 		this.logger = logger;
 		this.hints = hints;
+		this.platform = platform;
 		this.converterManager = converterManager;
 		this.driverManager = driverManager;
 
@@ -52,6 +56,7 @@ public class App
 		// main loop
 		while (!cancellationToken.IsCancellationRequested)
 		{
+			platform.Poll();
 			driverManager.Update();
 			converterManager.Update();
 		}
