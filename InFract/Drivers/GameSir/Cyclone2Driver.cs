@@ -113,7 +113,6 @@ public class Cyclone2Driver : IDriver
 
 		private void OnXUsbInputReceived(XUsbInputReport input)
 		{
-			// buttons
 			gamepad.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
 			gamepad.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
 			gamepad.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
@@ -130,7 +129,6 @@ public class Cyclone2Driver : IDriver
 			gamepad.SetButton(GamepadButtons.LeftStick, input.Buttons.HasFlag(XUsbButtons.LeftThumb));
 			gamepad.SetButton(GamepadButtons.RightStick, input.Buttons.HasFlag(XUsbButtons.RightThumb));
 
-			// axes
 			gamepad.SetAxis(GamepadAxis.LeftStickX, input.ThumbLeftX);
 			gamepad.SetAxis(GamepadAxis.LeftStickY, (short)~input.ThumbLeftY);
 			gamepad.SetAxis(GamepadAxis.RightStickX, input.ThumbRightX);
@@ -145,13 +143,48 @@ public class Cyclone2Driver : IDriver
 
 			ref Cyclone2InputReport input = ref Unsafe.As<byte, Cyclone2InputReport>(ref Unsafe.AsRef(in data[1]));
 
-			// buttons
+			Cyclone2Buttons buttons = input.Buttons;
 			Cyclone2SpecialButtons special = input.RawSpecialButtons;
+			if (xusb == null)
+			{
+				Cyclone2Buttons dpad = (Cyclone2Buttons)((ushort)input.Buttons & 0xF);
+				bool dpadUp = dpad is Cyclone2Buttons.DpadNorth or Cyclone2Buttons.DpadNorthwest or Cyclone2Buttons.DpadNortheast;
+				bool dpadDown = dpad is Cyclone2Buttons.DpadSouth or Cyclone2Buttons.DpadSouthwest
+					or Cyclone2Buttons.DpadSoutheast;
+				bool dpadLeft = dpad is Cyclone2Buttons.DpadWest or Cyclone2Buttons.DpadNorthwest
+					or Cyclone2Buttons.DpadSouthwest;
+				bool dpadRight = dpad is Cyclone2Buttons.DpadEast or Cyclone2Buttons.DpadNortheast
+					or Cyclone2Buttons.DpadSoutheast;
+
+				gamepad.SetButton(GamepadButtons.DpadUp, dpadUp);
+				gamepad.SetButton(GamepadButtons.DpadDown, dpadDown);
+				gamepad.SetButton(GamepadButtons.DpadLeft, dpadLeft);
+				gamepad.SetButton(GamepadButtons.DpadRight, dpadRight);
+				gamepad.SetButton(GamepadButtons.West, buttons.HasFlag(Cyclone2Buttons.West));
+				gamepad.SetButton(GamepadButtons.South, buttons.HasFlag(Cyclone2Buttons.South));
+				gamepad.SetButton(GamepadButtons.East, buttons.HasFlag(Cyclone2Buttons.East));
+				gamepad.SetButton(GamepadButtons.North, buttons.HasFlag(Cyclone2Buttons.North));
+				gamepad.SetButton(GamepadButtons.LeftShoulder, buttons.HasFlag(Cyclone2Buttons.LeftShoulder));
+				gamepad.SetButton(GamepadButtons.RightShoulder, buttons.HasFlag(Cyclone2Buttons.RightShoulder));
+				gamepad.SetButton(GamepadButtons.Back, buttons.HasFlag(Cyclone2Buttons.Share));
+				gamepad.SetButton(GamepadButtons.Start, buttons.HasFlag(Cyclone2Buttons.Options));
+				gamepad.SetButton(GamepadButtons.LeftStick, buttons.HasFlag(Cyclone2Buttons.LeftStick));
+				gamepad.SetButton(GamepadButtons.RightStick, buttons.HasFlag(Cyclone2Buttons.RightStick));
+				gamepad.SetButton(GamepadButtons.Guide, special.HasFlag(Cyclone2SpecialButtons.Guide));
+
+				gamepad.SetAxis(GamepadAxis.LeftStickX, BitHelpers.ScaleByteToShort(input.LeftStickX));
+				gamepad.SetAxis(GamepadAxis.LeftStickY, BitHelpers.ScaleByteToShort(input.LeftStickY));
+				gamepad.SetAxis(GamepadAxis.RightStickX, BitHelpers.ScaleByteToShort(input.RightStickX));
+				gamepad.SetAxis(GamepadAxis.RightStickY, BitHelpers.ScaleByteToShort(input.RightStickY));
+				gamepad.SetAxis(GamepadAxis.LeftTrigger, BitHelpers.ScaleByteToShort(input.LeftTrigger));
+				gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(input.RightTrigger));
+			}
+
 			gamepad.SetButton(GamepadButtons.LeftPaddle1, special.HasFlag(Cyclone2SpecialButtons.LeftBackButton));
 			gamepad.SetButton(GamepadButtons.RightPaddle1, special.HasFlag(Cyclone2SpecialButtons.RightBackButton));
 			gamepad.SetButton(GamepadButtons.Misc1, special.HasFlag(Cyclone2SpecialButtons.Capture));
 			gamepad.SetButton(GamepadButtons.Misc2, special.HasFlag(Cyclone2SpecialButtons.MButton));
-
+			
 			// gyro
 			long delta = input.Timestamp - (prevSensorTick ?? input.Timestamp);
 			if (delta < 0) delta += ushort.MaxValue; // wrap
