@@ -5,13 +5,27 @@ using System.Runtime.InteropServices;
 
 namespace InFract.Platforms.Linux.Native.LibC;
 
-public struct timespec
-{
-	public nint tv_sec;
-	public nint tv_usec;
-}
+public enum dev_t : ulong;
 
-public struct timeval
+public enum ino_t : ulong;
+
+public enum nlink_t : ulong;
+
+public enum mode_t : uint;
+
+public enum uid_t : uint;
+
+public enum gid_t : uint;
+
+public enum pid_t : int;
+
+public enum off_t : long;
+
+public enum blksize_t : long;
+
+public enum blkcnt_t : long;
+
+public struct timespec
 {
 	public nint tv_sec;
 	public nint tv_usec;
@@ -19,17 +33,17 @@ public struct timeval
 
 public struct stat
 {
-	public ulong st_dev;
-	public ulong st_ino;
-	public ulong st_nlink;
-	public uint st_mode;
-	public uint st_uid;
-	public uint st_gid;
+	public dev_t st_dev;
+	public ino_t st_ino;
+	public nlink_t st_nlink;
+	public mode_t st_mode;
+	public uid_t st_uid;
+	public gid_t st_gid;
 	private uint __pad0;
-	public ulong st_rdev;
-	public long st_size;
-	public long st_blksize;
-	public long st_blocks;
+	public dev_t st_rdev;
+	public off_t st_size;
+	public blksize_t st_blksize;
+	public blkcnt_t st_blocks;
 	public timespec st_atim;
 	public timespec st_mtim;
 	public timespec st_ctim;
