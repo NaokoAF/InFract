@@ -21,6 +21,7 @@ public class DriverManager : IDisposable
 	private readonly ImmutableArray<IDriver> drivers;
 	private readonly List<IDriverDevice> devices = new();
 	private readonly Dictionary<(byte, byte), IDriverDevice> deviceMap = new();
+	private readonly Dictionary<LibUsbDevice, (byte, byte)> usbDeviceIdMap = new();
 	private libusb_hotplug_callback_handle? hotplugCallbackHandle;
 
 	public DriverManager(ILogger<DriverManager> logger, LibUsbContext libUsb, IEnumerable<IDriver> drivers)
@@ -53,15 +54,13 @@ public class DriverManager : IDisposable
 			{
 				driver.Update();
 			}
-			catch (LibUsbException e)
-			{
-				if (e.Error != LIBUSB_ERROR_NO_DEVICE) throw;
-				close = true;
-			}
 			catch (Exception e)
 			{
-				logger.LogError(e, $"Driver error: {driver.Gamepad.Descriptor.Name}");
 				close = true;
+
+				if (e is LibUsbException { Error: LIBUSB_ERROR_NO_DEVICE }) break;
+
+				logger.LogError(e, $"Driver error: {driver.Gamepad.Descriptor.Name}");
 			}
 
 			if (close) Close(driver);
@@ -100,6 +99,7 @@ public class DriverManager : IDisposable
 
 		devices.Add(driverDevice);
 		deviceMap.Add(identifier, driverDevice);
+		usbDeviceIdMap.Add(device, identifier);
 
 		DeviceOpened?.Invoke(driverDevice);
 		return false;
@@ -111,10 +111,10 @@ public class DriverManager : IDisposable
 		DeviceClosed?.Invoke(driver);
 
 		LibUsbDevice usbDevice = driver.Device.Device;
-		deviceMap.Remove((usbDevice.BusNumber, usbDevice.DeviceAddress));
+		usbDeviceIdMap.Remove(usbDevice, out var identifier);
+		deviceMap.Remove(identifier);
 		devices.Remove(driver);
 
-		driver.Close();
 		driver.Dispose();
 	}
 
