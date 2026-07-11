@@ -13,7 +13,7 @@ namespace InFract.Usb.XUsb;
 
 public unsafe class XUsbLibUsbInterface : IXUsbInterface
 {
-	public event Action<XUsbInputReport>? InputReceived;
+	public event Action<Exception?, XUsbInputReport>? InputReceived;
 
 	private readonly LibUsbDeviceHandle handle;
 	private readonly byte interfaceNumber;
@@ -56,7 +56,7 @@ public unsafe class XUsbLibUsbInterface : IXUsbInterface
 		rumbleTransfer = LibUsbTransfer.Allocate(0, endpointOutSize);
 		rumbleTransfer.UserData = gcHandle;
 		rumbleTransfer.FillInterrupt(handle, endpointOut, 100);
-		
+
 		handle.ClaimInterface(interfaceNumber);
 		inputTransfer.Submit();
 	}
@@ -89,27 +89,39 @@ public unsafe class XUsbLibUsbInterface : IXUsbInterface
 	private static void OnInputTransferred(libusb_transfer* ptr)
 	{
 		LibUsbTransfer transfer = new(ptr);
-		if (transfer.Status != LIBUSB_TRANSFER_CANCELLED) transfer.Submit();
-		if (transfer.Status != LIBUSB_TRANSFER_COMPLETED) return;
-
-		if (transfer.ReadLength < 2) return;
-
-		// parse report
-		ReadOnlySpan<byte> buffer = transfer.ReadBuffer;
-		byte reportId = buffer[0];
-		byte size = buffer[1];
-		if (transfer.ReadLength < size) return;
-
 		XUsbLibUsbInterface self = (XUsbLibUsbInterface)GCHandle.FromIntPtr(transfer.UserData).Target!;
-		switch (reportId)
+		switch (transfer.Status)
 		{
-			case ReportIdStateInput:
-				if (size < Unsafe.SizeOf<XUsbInputReport>() + 2) break;
+			case LIBUSB_TRANSFER_COMPLETED:
+				// parse report
+				if (transfer.ReadLength < 2) return;
 
-				ref XUsbInputReport input = ref Unsafe.As<byte, XUsbInputReport>(ref Unsafe.AsRef(in buffer[2]));
-				self.InputReceived?.Invoke(input);
+				ReadOnlySpan<byte> buffer = transfer.ReadBuffer;
+				byte reportId = buffer[0];
+				byte size = buffer[1];
+				if (transfer.ReadLength < size) return;
+
+				switch (reportId)
+				{
+					case ReportIdStateInput:
+						if (size < Unsafe.SizeOf<XUsbInputReport>() + 2) break;
+
+						ref XUsbInputReport input = ref Unsafe.As<byte, XUsbInputReport>(ref Unsafe.AsRef(in buffer[2]));
+						self.InputReceived?.Invoke(null, input);
+						break;
+				}
+
 				break;
+			case LIBUSB_TRANSFER_CANCELLED: return;
+			case LIBUSB_TRANSFER_TIMED_OUT: break; // continue to resubmit
+			default:
+				self.InputReceived?.Invoke(new LibUsbException(LIBUSB_ERROR_OTHER), default);
+				return;
 		}
+
+		// resubmit
+		libusb_error error = transfer.Submit();
+		if (error != LIBUSB_SUCCESS) self.InputReceived?.Invoke(new LibUsbException(error), default);
 	}
 
 	public static XUsbLibUsbInterface Open(LibUsbDeviceHandle handle, byte interfaceNumber)

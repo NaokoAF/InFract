@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using InFract.Gamepads;
 using InFract.Gamepads.GameSir.Tegenaria;
@@ -34,6 +35,7 @@ public class TegenariaDriver : IDriver
 		private readonly IHidInterface hid;
 		private readonly IXUsbInterface? xusb;
 		private readonly Gamepad gamepad;
+		private readonly ConcurrentBag<Exception> inputErrors = new();
 		private byte rumbleLeft;
 		private byte rumbleRight;
 
@@ -86,6 +88,8 @@ public class TegenariaDriver : IDriver
 
 		public void Update()
 		{
+			if (!inputErrors.IsEmpty) throw new AggregateException(inputErrors);
+			
 			if (rumbleLeft != gamepad.RumbleLeft || rumbleRight != gamepad.RumbleRight)
 			{
 				if (xusb?.Rumble(gamepad.RumbleLeft, gamepad.RumbleRight) ?? false)
@@ -96,8 +100,14 @@ public class TegenariaDriver : IDriver
 			}
 		}
 
-		private void OnXUsbInputReceived(XUsbInputReport input)
+		private void OnXUsbInputReceived(Exception? exception, XUsbInputReport input)
 		{
+			if (exception != null)
+			{
+				inputErrors.Add(exception);
+				return;
+			}
+			
 			gamepad.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
 			gamepad.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
 			gamepad.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
@@ -122,8 +132,14 @@ public class TegenariaDriver : IDriver
 			gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(input.RightTrigger));
 		}
 
-		private void OnHidInputReceived(ReadOnlySpan<byte> data)
+		private void OnHidInputReceived(Exception? exception, ReadOnlySpan<byte> data)
 		{
+			if (exception != null)
+			{
+				inputErrors.Add(exception);
+				return;
+			}
+			
 			if (data[0] != ReportIdInput && data[1] != CommandIdInput) return;
 
 			ref TegenariaInputReport input = ref Unsafe.As<byte, TegenariaInputReport>(ref Unsafe.AsRef(in data[2]));

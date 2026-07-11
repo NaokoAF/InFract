@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using InFract.Gamepads;
@@ -35,6 +36,7 @@ public class Cyclone2Driver : IDriver
 		private readonly IHidInterface hid;
 		private readonly IXUsbInterface? xusb;
 		private readonly Gamepad gamepad;
+		private readonly ConcurrentBag<Exception> inputErrors = new();
 		private long prevHeartbeatTime;
 		private byte rumbleLeft;
 		private byte rumbleRight;
@@ -95,6 +97,8 @@ public class Cyclone2Driver : IDriver
 
 		public void Update()
 		{
+			if (!inputErrors.IsEmpty) throw new AggregateException(inputErrors);
+
 			// periodically send heartbeat to enable hid mode
 			if (Stopwatch.GetTimestamp() - prevHeartbeatTime >= HeartbeatRate)
 			{
@@ -111,8 +115,14 @@ public class Cyclone2Driver : IDriver
 			}
 		}
 
-		private void OnXUsbInputReceived(XUsbInputReport input)
+		private void OnXUsbInputReceived(Exception? exception, XUsbInputReport input)
 		{
+			if (exception != null)
+			{
+				inputErrors.Add(exception);
+				return;
+			}
+
 			gamepad.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
 			gamepad.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
 			gamepad.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
@@ -137,8 +147,14 @@ public class Cyclone2Driver : IDriver
 			gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(input.RightTrigger));
 		}
 
-		private void OnHidInputReceived(ReadOnlySpan<byte> data)
+		private void OnHidInputReceived(Exception? exception, ReadOnlySpan<byte> data)
 		{
+			if (exception != null)
+			{
+				inputErrors.Add(exception);
+				return;
+			}
+
 			if (data[0] != ReportIdInput) return;
 
 			ref Cyclone2InputReport input = ref Unsafe.As<byte, Cyclone2InputReport>(ref Unsafe.AsRef(in data[1]));
@@ -184,7 +200,7 @@ public class Cyclone2Driver : IDriver
 			gamepad.SetButton(GamepadButtons.RightPaddle1, special.HasFlag(Cyclone2SpecialButtons.RightBackButton));
 			gamepad.SetButton(GamepadButtons.Misc1, special.HasFlag(Cyclone2SpecialButtons.Capture));
 			gamepad.SetButton(GamepadButtons.Misc2, special.HasFlag(Cyclone2SpecialButtons.MButton));
-			
+
 			// gyro
 			long delta = input.Timestamp - (prevSensorTick ?? input.Timestamp);
 			if (delta < 0) delta += ushort.MaxValue; // wrap

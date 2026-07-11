@@ -8,8 +8,8 @@ namespace InFract.Platforms.Linux.HidRaw;
 
 public unsafe class HidRawDevice : IHidInterface
 {
-	public event Action<ReadOnlySpan<byte>>? InputReceived;
-	
+	public event Action<Exception?, ReadOnlySpan<byte>>? InputReceived;
+
 	public int FileDescriptor => fd;
 
 	private readonly int fd;
@@ -29,9 +29,13 @@ public unsafe class HidRawDevice : IHidInterface
 	public bool Poll()
 	{
 		int readBytes = (int)read(fd, Unsafe.AsPointer(ref readBuffer[0]), (nuint)readBuffer.Length);
-		if (readBytes <= 0) return false;
+		if (readBytes <= 0)
+		{
+			InputReceived?.Invoke(new ErrnoException(), default);
+			return false;
+		}
 
-		InputReceived?.Invoke(readBuffer.AsSpan(0, readBytes));
+		InputReceived?.Invoke(null, readBuffer.AsSpan(0, readBytes));
 		return true;
 	}
 
@@ -70,6 +74,6 @@ public unsafe class HidRawDevice : IHidInterface
 	}
 
 	public void Close() => close(fd);
-	
+
 	public void Dispose() => close(fd);
 }

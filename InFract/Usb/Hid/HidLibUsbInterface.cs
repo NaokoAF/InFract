@@ -11,7 +11,7 @@ namespace InFract.Usb.Hid;
 
 public unsafe class HidLibUsbInterface : IHidInterface
 {
-	public event Action<ReadOnlySpan<byte>>? InputReceived;
+	public event Action<Exception?, ReadOnlySpan<byte>>? InputReceived;
 
 	private readonly LibUsbDeviceHandle handle;
 	private readonly byte interfaceNumber;
@@ -79,11 +79,21 @@ public unsafe class HidLibUsbInterface : IHidInterface
 	private static void OnInputTransferred(libusb_transfer* ptr)
 	{
 		LibUsbTransfer transfer = new(ptr);
-		if (transfer.Status != LIBUSB_TRANSFER_CANCELLED) transfer.Submit();
-		if (transfer.Status != LIBUSB_TRANSFER_COMPLETED) return;
-
 		HidLibUsbInterface self = (HidLibUsbInterface)GCHandle.FromIntPtr(transfer.UserData).Target!;
-		self.InputReceived?.Invoke(transfer.ReadBuffer);
+
+		switch (transfer.Status)
+		{
+			case LIBUSB_TRANSFER_COMPLETED: self.InputReceived?.Invoke(null, transfer.ReadBuffer); break;
+			case LIBUSB_TRANSFER_CANCELLED: return;
+			case LIBUSB_TRANSFER_TIMED_OUT: break; // continue to resubmit
+			default:
+				self.InputReceived?.Invoke(new LibUsbException(LIBUSB_ERROR_OTHER), default);
+				return;
+		}
+
+		// resubmit
+		libusb_error error = transfer.Submit();
+		if (error != LIBUSB_SUCCESS) self.InputReceived?.Invoke(new LibUsbException(error), default);
 	}
 
 	[UnmanagedCallersOnly]
@@ -94,7 +104,7 @@ public unsafe class HidLibUsbInterface : IHidInterface
 		HidLibUsbInterface self = (HidLibUsbInterface)GCHandle.FromIntPtr(transfer.UserData).Target!;
 		self.outputLock = false;
 	}
-	
+
 	public static HidLibUsbInterface Open(LibUsbDeviceHandle handle, byte interfaceNumber)
 	{
 		using LibUsbConfigDescriptor config = handle.Device.GetActiveConfigDescriptor();
