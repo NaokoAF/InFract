@@ -95,14 +95,32 @@ public class LinuxPlatform : IPlatform
 		using SystemdDevice root = SystemdDevice.FromSubSystemSysName("usb"u8, sysName);
 
 		// search for hidraw interfaces
-		using var enumerator = root.EnumerateChildren().MatchSubSystem("hidraw"u8);
-		foreach (var child in enumerator.GetDevices())
+		using SystemdDeviceEnumerator enumerator = root.EnumerateChildren()
+			.MatchSubSystem("hidraw"u8)
+			.AllowUninitialized();
+
+		SystemdDevice? hidrawDevice = enumerator.GetDevices().FirstOrDefault();
+		foreach (SystemdDevice child in enumerator.GetDevices())
 		{
-			string path = child.DevName.ToString();
-			return hidRaw.Open(path);
+			hidrawDevice = child;
+			break;
 		}
 
-		throw new InvalidOperationException("HIDRAW interface not found");
+		if(hidrawDevice == null) throw new InvalidOperationException("HIDRAW interface not found");
+
+		for (int i = 0; i <= 10; i++)
+		{
+			try
+			{
+				return hidRaw.Open(hidrawDevice.DevName);
+			}
+			catch
+			{
+				Thread.Sleep(100);
+			}
+		}
+
+		throw new InvalidOperationException("Failed to open HIDRAW device");
 	}
 
 	private void LibUsbLoop()
