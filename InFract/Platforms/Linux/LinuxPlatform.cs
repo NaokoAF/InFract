@@ -66,8 +66,8 @@ public class LinuxPlatform : IPlatform
 
 	public void Poll()
 	{
-		manualReset.Reset();
 		manualReset.Wait(PollTimeout, cts.Token);
+		manualReset.Reset();
 	}
 
 	public IGamepadConverter CreateConverter(Gamepad gamepad)
@@ -145,5 +145,9 @@ public class LinuxPlatform : IPlatform
 
 	public void Dispose()
 	{
+		cts.Cancel();
+		cts.Dispose();
+		manualReset.Set();
+		manualReset.Dispose();
 	}
 }
