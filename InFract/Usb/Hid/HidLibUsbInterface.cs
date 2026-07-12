@@ -42,10 +42,7 @@ public unsafe class HidLibUsbInterface : IHidInterface
 		outputTransfer.UserData = gcHandle;
 		outputTransfer.FillInterrupt(handle, endpointOut, 100);
 		outputTransfer.SetCallback(&OnOutputTransferred);
-	}
-
-	public void Open()
-	{
+		
 		handle.ClaimInterface(interfaceNumber);
 		inputTransfer.Submit();
 	}
