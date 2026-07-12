@@ -4,4 +4,5 @@ public interface IXbox360Target : IDisposable
 {
 	Xbox360Effects PollEffects();
 	void SendInput(in Xbox360InputReport input);
+	void Close();
 }

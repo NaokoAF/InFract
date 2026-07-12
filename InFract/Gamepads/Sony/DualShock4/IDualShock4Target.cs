@@ -6,4 +6,5 @@ public interface IDualShock4Target : IDisposable
 	
 	DualShock4Effects PollEffects();
 	void SendInput(in DualShock4InputReport input);
+	void Close();
 }

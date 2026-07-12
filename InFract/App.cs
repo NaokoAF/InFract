@@ -62,5 +62,8 @@ public class App
 		}
 
 		logger.LogInformation("Shutting down...");
+		driverManager.Close();
+		converterManager.Close();
+		platform.Close();
 	}
 }

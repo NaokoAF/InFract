@@ -146,6 +146,7 @@ public class DualShock4Converter : IGamepadConverter
 		};
 	}
 
+	public void Close() => target.Close();
 	public void Dispose() => target.Dispose();
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]

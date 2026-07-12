@@ -50,6 +50,19 @@ public class GamepadConverterManager : IDisposable
 			}
 		}
 	}
+
+	public void Close()
+	{
+		foreach ((Gamepad gamepad, IGamepadConverter converter) in converters)
+		{
+			gamepad.InputReceived -= converter.Update;
+			
+			converter.Close();
+			converter.Dispose();
+		}
+		
+		converters.Clear();
+	}
 	
 	public void Dispose()
 	{

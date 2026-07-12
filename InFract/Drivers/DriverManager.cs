@@ -67,6 +67,17 @@ public class DriverManager : IDisposable
 		}
 	}
 
+	public void Close()
+	{
+		foreach (IDriverDevice driver in devices)
+		{
+			driver.Close();
+			driver.Dispose();
+		}
+
+		devices.Clear();
+	}
+
 	private bool OnHotplug(LibUsbDevice device, libusb_hotplug_event type)
 	{
 		if (type != LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) return false;

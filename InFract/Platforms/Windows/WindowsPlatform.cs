@@ -126,6 +126,12 @@ public class WindowsPlatform : IPlatform
 		return HidLibUsbInterface.Open(device, interfaceNumber);
 	}
 
+	public void Close()
+	{
+		vigem?.Close();
+		viiper?.Close();
+	}
+	
 	public void Dispose()
 	{
 		vigem?.Dispose();

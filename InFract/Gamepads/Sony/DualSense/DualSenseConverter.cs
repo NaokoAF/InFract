@@ -159,6 +159,7 @@ public class DualSenseConverter : IGamepadConverter
 		};
 	}
 
+	public void Close() => target.Close();
 	public void Dispose() => target.Dispose();
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -49,5 +49,6 @@ public class Xbox360Converter : IGamepadConverter
 		};
 	}
 
+	public void Close() => target.Close();
 	public void Dispose() => target.Dispose();
 }

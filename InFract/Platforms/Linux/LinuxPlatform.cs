@@ -152,12 +152,16 @@ public class LinuxPlatform : IPlatform
 			}
 		}
 	}
-
+	
+	public void Close()
+	{ 
+		cts.Cancel();
+		manualReset.Set();
+	}
+	
 	public void Dispose()
 	{
-		cts.Cancel();
 		cts.Dispose();
-		manualReset.Set();
 		manualReset.Dispose();
 	}
 }

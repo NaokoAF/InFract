@@ -7,4 +7,5 @@ public interface IDualSenseTarget : IDisposable
 
 	DualSenseEffects PollEffects();
 	void SendInput(in DualSenseInputReport input);
+	void Close();
 }

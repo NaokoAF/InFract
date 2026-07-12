@@ -151,19 +151,16 @@ public abstract unsafe class UHidDevice : IDisposable
 		if (written != sizeof(uhid_event)) throw new Exception(Marshal.GetLastPInvokeErrorMessage());
 	}
 
-	protected virtual void Dispose(bool disposing)
-	{
-		close(fd);
-	}
+	public void Close() => close(fd);
 
 	public void Dispose()
 	{
-		Dispose(true);
+		Close();
 		GC.SuppressFinalize(this);
 	}
 
 	~UHidDevice()
 	{
-		Dispose(false);
+		Close();
 	}
 }

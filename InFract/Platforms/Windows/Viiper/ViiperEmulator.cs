@@ -43,7 +43,7 @@ public class ViiperEmulator : IEmulator
 		serverName = ping.Server;
 		serverVersion = ping.Version;
 	}
-	
+
 	public bool HasConverter(string id) => Converters.ContainsKey(id);
 
 	public bool TryCreateConverter(string id, GamepadDescriptor descriptor, [NotNullWhen(true)] out IGamepadConverter? converter)
@@ -82,7 +82,7 @@ public class ViiperEmulator : IEmulator
 		Device busDevice = await client.BusDeviceAddAsync(busId, deviceReq);
 		return await client.ConnectDeviceAsync(busId, busDevice.DevID);
 	}
-	
+
 	private async Task<IGamepadConverter> CreateXbox360(GamepadDescriptor descriptor)
 	{
 		ViiperDevice device = await CreateDevice("xbox360", UsbIds.MicrosoftVendorId, UsbIds.MicrosoftXbox360WiredProductId);
@@ -98,23 +98,26 @@ public class ViiperEmulator : IEmulator
 		_ = target.StartAsync();
 		return new DualShock4Converter(target);
 	}
-	
+
 	private async Task<IGamepadConverter> CreateDualSense(GamepadDescriptor descriptor, bool edge)
 	{
 		string name = edge ? "dualsenseedge" : "dualsense";
 		ushort vid = edge ? UsbIds.SonyDualSenseEdgeProductId : UsbIds.SonyDualSenseProductId;
-		
+
 		ViiperDevice device = await CreateDevice(name, UsbIds.SonyVendorId, vid);
 		DualSenseViiperTarget target = new(device, edge, descriptor);
 		_ = target.StartAsync();
 		return new DualSenseConverter(target);
 	}
 
-	public void Dispose()
+	public void Close()
 	{
 		foreach (uint bus in buses.Keys) client.BusRemoveAsync(bus).Wait();
 		buses.Clear();
+	}
 
+	public void Dispose()
+	{
 		client.Dispose();
 	}
 }

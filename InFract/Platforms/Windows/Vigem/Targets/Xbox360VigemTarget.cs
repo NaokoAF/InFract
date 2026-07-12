@@ -29,10 +29,14 @@ public class Xbox360VigemTarget : IXbox360Target
 		VigemException.ThrowIfError(vigem_target_x360_update(client, target, report));
 	}
 
-	public void Dispose()
+	public void Close()
 	{
 		vigem_target_x360_unregister_notification(target);
 		vigem_target_remove(client, target);
+	}
+
+	public void Dispose()
+	{
 		vigem_target_free(target);
 	}
 	

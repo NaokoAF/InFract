@@ -11,9 +11,9 @@ namespace InFract.Platforms.Windows.Vigem;
 public class VigemEmulator : IEmulator
 {
 	public IEnumerable<string> ConverterIds => Converters.Keys;
-	
+
 	private readonly nint client;
-	
+
 	private static readonly Dictionary<string, Func<nint, GamepadDescriptor, IGamepadConverter>> Converters =
 		new(StringComparer.OrdinalIgnoreCase)
 		{
@@ -44,12 +44,9 @@ public class VigemEmulator : IEmulator
 		return true;
 	}
 
-	public void Dispose()
-	{
-		vigem_disconnect(client);
-		vigem_free(client);
-	}
-	
+	public void Close() => vigem_disconnect(client);
+	public void Dispose() => vigem_free(client);
+
 	private static DualShock4VigemTarget CreateDualShock4(nint client, GamepadDescriptor descriptor)
 	{
 		nint target = vigem_target_ds4_alloc();

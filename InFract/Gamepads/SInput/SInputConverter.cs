@@ -93,5 +93,6 @@ public class SInputConverter : IGamepadConverter
 		};
 	}
 
+	public void Close() => target.Close();
 	public void Dispose() => target.Dispose();
 }

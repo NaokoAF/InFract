@@ -61,17 +61,20 @@ public abstract class ViiperTarget<TInput, TOutput> : IDisposable
 		OnOutputReceived(output);
 	}
 
-	public void Dispose()
+	public void Close()
 	{
 		device.OnDisconnect = null;
 		device.OnOutput = null;
 		
 		cts.Cancel();
-		cts.Dispose();
 		inputQueue.Clear();
 		manualReset.Set();
+	}
+	
+	public void Dispose()
+	{
+		cts.Dispose();
 		manualReset.Dispose();
-		
 		device.Dispose();
 	}
 }

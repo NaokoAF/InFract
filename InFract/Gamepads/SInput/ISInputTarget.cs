@@ -4,4 +4,5 @@ public interface ISInputTarget : IDisposable
 {
 	SInputEffects PollEffects();
 	void SendInput(in SInputReport input);
+	void Close();
 }

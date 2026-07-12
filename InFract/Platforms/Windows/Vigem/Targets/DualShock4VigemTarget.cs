@@ -54,10 +54,14 @@ public class DualShock4VigemTarget : IDualShock4Target
 		VigemException.ThrowIfError(vigem_target_ds4_update_ex(client, target, report));
 	}
 
-	public void Dispose()
+	public void Close()
 	{
 		vigem_target_ds4_unregister_notification(target);
 		vigem_target_remove(client, target);
+	}
+	
+	public void Dispose()
+	{
 		vigem_target_free(target);
 	}
 
