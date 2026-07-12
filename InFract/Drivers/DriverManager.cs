@@ -43,7 +43,7 @@ public class DriverManager : IDisposable
 		);
 	}
 
-	public void Update()
+	public void Poll()
 	{
 		for (int i = devices.Count - 1; i >= 0; i--)
 		{
@@ -52,7 +52,7 @@ public class DriverManager : IDisposable
 
 			try
 			{
-				driver.Update();
+				driver.Poll();
 			}
 			catch (Exception e)
 			{

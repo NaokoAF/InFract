@@ -36,13 +36,13 @@ public class GamepadConverterManager : IDisposable
 		converter.Dispose();
 	}
 
-	public void Update()
+	public void Poll()
 	{
 		foreach ((Gamepad gamepad, IGamepadConverter converter) in converters)
 		{
 			try
 			{
-				gamepad.Effects = converter.GetEffects();
+				gamepad.Effects = converter.PollEffects();
 			}
 			catch (Exception e)
 			{

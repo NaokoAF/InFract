@@ -38,7 +38,7 @@ public class Xbox360Converter : IGamepadConverter
 		target.SendInput(input);
 	}
 
-	public GamepadEffects GetEffects()
+	public GamepadEffects PollEffects()
 	{
 		Xbox360Effects effects = target.PollEffects();
 		return new()

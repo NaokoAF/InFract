@@ -133,7 +133,7 @@ public class DualShock4Converter : IGamepadConverter
 		target.SendInput(input);
 	}
 
-	public GamepadEffects GetEffects()
+	public GamepadEffects PollEffects()
 	{
 		DualShock4Effects effects = target.PollEffects();
 		return new()

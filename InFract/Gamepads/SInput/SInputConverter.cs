@@ -79,7 +79,7 @@ public class SInputConverter : IGamepadConverter
 		target.SendInput(input);
 	}
 	
-	public GamepadEffects GetEffects()
+	public GamepadEffects PollEffects()
 	{
 		SInputEffects effects = target.PollEffects();
 		return new()

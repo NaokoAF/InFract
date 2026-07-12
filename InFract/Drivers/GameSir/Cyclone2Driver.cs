@@ -96,7 +96,7 @@ public class Cyclone2Driver : IDriver
 			gamepad = new(Descriptor);
 		}
 
-		public void Update()
+		public void Poll()
 		{
 			if (!inputErrors.IsEmpty) throw new AggregateException(inputErrors);
 

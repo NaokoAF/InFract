@@ -7,6 +7,6 @@ public interface IDriverDevice : IDisposable
 {
 	LibUsbDeviceHandle Device { get; }
 	Gamepad Gamepad { get; }
-	void Update();
+	void Poll();
 	void Close();
 }

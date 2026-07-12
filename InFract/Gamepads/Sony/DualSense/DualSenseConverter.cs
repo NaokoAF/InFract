@@ -146,7 +146,7 @@ public class DualSenseConverter : IGamepadConverter
 		target.SendInput(input);
 	}
 
-	public GamepadEffects GetEffects()
+	public GamepadEffects PollEffects()
 	{
 		DualSenseEffects effects = target.PollEffects();
 		return new()

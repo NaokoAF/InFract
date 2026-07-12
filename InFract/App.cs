@@ -57,8 +57,8 @@ public class App
 		while (!cancellationToken.IsCancellationRequested)
 		{
 			platform.Poll();
-			driverManager.Update();
-			converterManager.Update();
+			driverManager.Poll();
+			converterManager.Poll();
 		}
 
 		logger.LogInformation("Shutting down...");
