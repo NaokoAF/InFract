@@ -12,5 +12,10 @@ public class Gamepad
 			throw new ArgumentOutOfRangeException(nameof(descriptor));
 		
 		Descriptor = descriptor;
+
+		State.PowerStatus = GamepadPowerStatus.NoBattery;
+		State.BatteryLevel = 100;
+		State.LeftTrigger = short.MinValue;
+		State.RightTrigger = short.MinValue;
 	}
 }
