@@ -5,6 +5,7 @@ namespace InFract.Gamepads;
 
 public struct GamepadState
 {
+	public uint SequenceNumber;
 	public GamepadPowerStatus PowerStatus;
 	public byte BatteryLevel;
 	public GamepadButtons Buttons;

@@ -148,6 +148,8 @@ public class Cyclone2Driver : IDriver
 			state.RightStickY = (short)~input.ThumbRightY;
 			state.LeftTrigger = BitHelpers.ScaleByteToShort(input.LeftTrigger);
 			state.RightTrigger = BitHelpers.ScaleByteToShort(input.RightTrigger);
+
+			Interlocked.Increment(ref state.SequenceNumber);
 		}
 
 		private void OnHidInputReceived(Exception? exception, ReadOnlySpan<byte> data)
@@ -220,6 +222,8 @@ public class Cyclone2Driver : IDriver
 			state.AccelY = input.AccelY;
 			state.AccelZ = input.AccelZ;
 			state.ImuTimestampUs = (sensorTicks * 16) / 3; // 5.33us units;
+
+			Interlocked.Increment(ref state.SequenceNumber);
 		}
 
 		private bool SendHeartbeat()

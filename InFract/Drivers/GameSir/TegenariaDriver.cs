@@ -133,6 +133,8 @@ public class TegenariaDriver : IDriver
 			state.RightStickY = (short)~input.ThumbRightY;
 			state.LeftTrigger = BitHelpers.ScaleByteToShort(input.LeftTrigger);
 			state.RightTrigger = BitHelpers.ScaleByteToShort(input.RightTrigger);
+			
+			Interlocked.Increment(ref state.SequenceNumber);
 		}
 
 		private void OnHidInputReceived(Exception? exception, ReadOnlySpan<byte> data)
@@ -180,6 +182,8 @@ public class TegenariaDriver : IDriver
 			state.SetButton(GamepadButtons.RightPaddle1, special.HasFlag(TegenariaSpecialButtons.RightBackButton));
 			state.SetButton(GamepadButtons.Misc1, special.HasFlag(TegenariaSpecialButtons.Capture));
 			state.SetButton(GamepadButtons.Misc2, special.HasFlag(TegenariaSpecialButtons.MButton));
+			
+			Interlocked.Increment(ref state.SequenceNumber);
 		}
 
 		public void Close()

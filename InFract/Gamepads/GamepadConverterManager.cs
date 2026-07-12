@@ -8,6 +8,7 @@ public class GamepadConverterManager : IDisposable
 	private readonly ILogger<GamepadConverterManager> logger;
 	private readonly IPlatform platform;
 	private readonly Dictionary<Gamepad, IGamepadConverter> converters = new();
+	private readonly Dictionary<Gamepad, GamepadState> gamepadStateMap = new();
 
 	public GamepadConverterManager(ILogger<GamepadConverterManager> logger, IPlatform platform)
 	{
@@ -22,12 +23,15 @@ public class GamepadConverterManager : IDisposable
 
 		converter = platform.CreateConverter(gamepad);
 		converters.Add(gamepad, converter);
+		gamepadStateMap.Add(gamepad, gamepad.State);
 		return converter;
 	}
 
 	public void Close(Gamepad gamepad)
 	{
 		if (!converters.Remove(gamepad, out var converter)) return;
+		gamepadStateMap.Remove(gamepad);
+		
 		converter.Dispose();
 	}
 
@@ -35,7 +39,14 @@ public class GamepadConverterManager : IDisposable
 	{
 		foreach ((Gamepad gamepad, IGamepadConverter converter) in converters)
 		{
-			converter.Update(gamepad.State);
+			GamepadState state = gamepad.State;
+			GamepadState prevState = gamepadStateMap[gamepad];
+			if (state.SequenceNumber != prevState.SequenceNumber)
+			{
+				converter.Update(state);
+				gamepadStateMap[gamepad] = state;
+			}
+			
 			gamepad.Effects = converter.GetEffects();
 		}
 	}
