@@ -39,15 +39,22 @@ public class GamepadConverterManager : IDisposable
 	{
 		foreach ((Gamepad gamepad, IGamepadConverter converter) in converters)
 		{
-			GamepadState state = gamepad.State;
-			GamepadState prevState = gamepadStateMap[gamepad];
-			if (state.SequenceNumber != prevState.SequenceNumber)
+			try
 			{
-				converter.Update(state);
-				gamepadStateMap[gamepad] = state;
+				GamepadState state = gamepad.State;
+				GamepadState prevState = gamepadStateMap[gamepad];
+				if (state.SequenceNumber != prevState.SequenceNumber)
+				{
+					converter.Update(state);
+					gamepadStateMap[gamepad] = state;
+				}
+				
+				gamepad.Effects = converter.GetEffects();
 			}
-			
-			gamepad.Effects = converter.GetEffects();
+			catch (Exception e)
+			{
+				logger.LogError(e, $"Failed to update gamepad converter for {gamepad.Descriptor.Name}");
+			}
 		}
 	}
 	
