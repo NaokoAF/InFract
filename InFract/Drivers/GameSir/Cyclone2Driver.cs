@@ -228,7 +228,7 @@ public class Cyclone2Driver : IDriver
 
 		private bool SendHeartbeat()
 		{
-			if (hid.Write(PacketHeartbeat) >= 0) return false;
+			if (hid.Write(PacketHeartbeat) < 0) return false;
 
 			prevHeartbeatTime = Stopwatch.GetTimestamp();
 			return true;
