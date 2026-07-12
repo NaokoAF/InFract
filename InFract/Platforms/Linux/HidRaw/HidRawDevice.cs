@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using InFract.Platforms.Linux.Native;
 using InFract.Usb.Hid;
 using static InFract.Platforms.Linux.Native.LibC.LibC;
@@ -28,14 +29,23 @@ public unsafe class HidRawDevice : IHidInterface
 
 	public bool Poll()
 	{
-		int readBytes = (int)read(fd, Unsafe.AsPointer(ref readBuffer[0]), (nuint)readBuffer.Length);
-		if (readBytes <= 0)
+		for (int i = 0; i < HIDRAW_BUFFER_SIZE; i++)
 		{
-			InputReceived?.Invoke(new ErrnoException(), default);
-			return false;
-		}
+			int readBytes = (int)read(fd, Unsafe.AsPointer(ref readBuffer[0]), (nuint)readBuffer.Length);
+			if (readBytes == 0) return true;
+			
+			if (readBytes < 0)
+			{
+				int error = Marshal.GetLastPInvokeError();
+				if (error == EWOULDBLOCK) return true;
+				
+				InputReceived?.Invoke(new ErrnoException(error), default);
+				return false;
+			}
 
-		InputReceived?.Invoke(null, readBuffer.AsSpan(0, readBytes));
+			InputReceived?.Invoke(null, readBuffer.AsSpan(0, readBytes));
+		}
+		
 		return true;
 	}
 
