@@ -36,8 +36,7 @@ public class TegenariaDriver : IDriver
 		private readonly IXUsbInterface? xusb;
 		private readonly Gamepad gamepad;
 		private readonly ConcurrentBag<Exception> inputErrors = new();
-		private byte rumbleLeft;
-		private byte rumbleRight;
+		private GamepadEffects prevEffects;
 
 		private const int ReportSizeXUsb = 32;
 		private const int ReportSizeHid = 64;
@@ -90,14 +89,17 @@ public class TegenariaDriver : IDriver
 		{
 			if (!inputErrors.IsEmpty) throw new AggregateException(inputErrors);
 			
-			if (rumbleLeft != gamepad.RumbleLeft || rumbleRight != gamepad.RumbleRight)
+			GamepadEffects effects = gamepad.Effects;
+			if (prevEffects.RumbleLeft != effects.RumbleLeft || prevEffects.RumbleRight != effects.RumbleRight)
 			{
-				if (xusb?.Rumble(gamepad.RumbleLeft, gamepad.RumbleRight) ?? false)
+				if (xusb?.Rumble(effects.RumbleLeft, effects.RumbleRight) ?? false)
 				{
-					rumbleLeft = gamepad.RumbleLeft;
-					rumbleRight = gamepad.RumbleRight;
+					prevEffects.RumbleLeft = effects.RumbleLeft;
+					prevEffects.RumbleRight = effects.RumbleRight;
 				}
 			}
+
+			prevEffects = effects;
 		}
 
 		private void OnXUsbInputReceived(Exception? exception, XUsbInputReport input)
@@ -108,28 +110,29 @@ public class TegenariaDriver : IDriver
 				return;
 			}
 			
-			gamepad.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
-			gamepad.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
-			gamepad.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
-			gamepad.SetButton(GamepadButtons.DpadRight, input.Buttons.HasFlag(XUsbButtons.DpadRight));
-			gamepad.SetButton(GamepadButtons.West, input.Buttons.HasFlag(XUsbButtons.X));
-			gamepad.SetButton(GamepadButtons.South, input.Buttons.HasFlag(XUsbButtons.A));
-			gamepad.SetButton(GamepadButtons.East, input.Buttons.HasFlag(XUsbButtons.B));
-			gamepad.SetButton(GamepadButtons.North, input.Buttons.HasFlag(XUsbButtons.Y));
-			gamepad.SetButton(GamepadButtons.LeftShoulder, input.Buttons.HasFlag(XUsbButtons.LeftShoulder));
-			gamepad.SetButton(GamepadButtons.RightShoulder, input.Buttons.HasFlag(XUsbButtons.RightShoulder));
-			gamepad.SetButton(GamepadButtons.Back, input.Buttons.HasFlag(XUsbButtons.Back));
-			gamepad.SetButton(GamepadButtons.Start, input.Buttons.HasFlag(XUsbButtons.Start));
-			gamepad.SetButton(GamepadButtons.Guide, input.Buttons.HasFlag(XUsbButtons.Guide));
-			gamepad.SetButton(GamepadButtons.LeftStick, input.Buttons.HasFlag(XUsbButtons.LeftThumb));
-			gamepad.SetButton(GamepadButtons.RightStick, input.Buttons.HasFlag(XUsbButtons.RightThumb));
+			ref GamepadState state = ref gamepad.State;
+			state.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
+			state.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
+			state.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
+			state.SetButton(GamepadButtons.DpadRight, input.Buttons.HasFlag(XUsbButtons.DpadRight));
+			state.SetButton(GamepadButtons.West, input.Buttons.HasFlag(XUsbButtons.X));
+			state.SetButton(GamepadButtons.South, input.Buttons.HasFlag(XUsbButtons.A));
+			state.SetButton(GamepadButtons.East, input.Buttons.HasFlag(XUsbButtons.B));
+			state.SetButton(GamepadButtons.North, input.Buttons.HasFlag(XUsbButtons.Y));
+			state.SetButton(GamepadButtons.LeftShoulder, input.Buttons.HasFlag(XUsbButtons.LeftShoulder));
+			state.SetButton(GamepadButtons.RightShoulder, input.Buttons.HasFlag(XUsbButtons.RightShoulder));
+			state.SetButton(GamepadButtons.Back, input.Buttons.HasFlag(XUsbButtons.Back));
+			state.SetButton(GamepadButtons.Start, input.Buttons.HasFlag(XUsbButtons.Start));
+			state.SetButton(GamepadButtons.Guide, input.Buttons.HasFlag(XUsbButtons.Guide));
+			state.SetButton(GamepadButtons.LeftStick, input.Buttons.HasFlag(XUsbButtons.LeftThumb));
+			state.SetButton(GamepadButtons.RightStick, input.Buttons.HasFlag(XUsbButtons.RightThumb));
 
-			gamepad.SetAxis(GamepadAxis.LeftStickX, input.ThumbLeftX);
-			gamepad.SetAxis(GamepadAxis.LeftStickY, (short)~input.ThumbLeftY);
-			gamepad.SetAxis(GamepadAxis.RightStickX, input.ThumbRightX);
-			gamepad.SetAxis(GamepadAxis.RightStickY, (short)~input.ThumbRightY);
-			gamepad.SetAxis(GamepadAxis.LeftTrigger, BitHelpers.ScaleByteToShort(input.LeftTrigger));
-			gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(input.RightTrigger));
+			state.LeftStickX = input.ThumbLeftX;
+			state.LeftStickY = (short)~input.ThumbLeftY;
+			state.RightStickX = input.ThumbRightX;
+			state.RightStickY = (short)~input.ThumbRightY;
+			state.LeftTrigger = BitHelpers.ScaleByteToShort(input.LeftTrigger);
+			state.RightTrigger = BitHelpers.ScaleByteToShort(input.RightTrigger);
 		}
 
 		private void OnHidInputReceived(Exception? exception, ReadOnlySpan<byte> data)
@@ -142,40 +145,41 @@ public class TegenariaDriver : IDriver
 			
 			if (data[0] != ReportIdInput && data[1] != CommandIdInput) return;
 
+			ref GamepadState state = ref gamepad.State;
 			ref TegenariaInputReport input = ref Unsafe.As<byte, TegenariaInputReport>(ref Unsafe.AsRef(in data[2]));
 
 			if (xusb == null)
 			{
 				TegenariaButtons buttons = input.Buttons;
-				gamepad.SetButton(GamepadButtons.DpadUp, buttons.HasFlag(TegenariaButtons.DpadUp));
-				gamepad.SetButton(GamepadButtons.DpadDown, buttons.HasFlag(TegenariaButtons.DpadDown));
-				gamepad.SetButton(GamepadButtons.DpadLeft, buttons.HasFlag(TegenariaButtons.DpadLeft));
-				gamepad.SetButton(GamepadButtons.DpadRight, buttons.HasFlag(TegenariaButtons.DpadRight));
-				gamepad.SetButton(GamepadButtons.West, buttons.HasFlag(TegenariaButtons.X));
-				gamepad.SetButton(GamepadButtons.South, buttons.HasFlag(TegenariaButtons.A));
-				gamepad.SetButton(GamepadButtons.East, buttons.HasFlag(TegenariaButtons.B));
-				gamepad.SetButton(GamepadButtons.North, buttons.HasFlag(TegenariaButtons.Y));
-				gamepad.SetButton(GamepadButtons.LeftShoulder, buttons.HasFlag(TegenariaButtons.LeftShoulder));
-				gamepad.SetButton(GamepadButtons.RightShoulder, buttons.HasFlag(TegenariaButtons.RightShoulder));
-				gamepad.SetButton(GamepadButtons.Back, buttons.HasFlag(TegenariaButtons.Back));
-				gamepad.SetButton(GamepadButtons.Start, buttons.HasFlag(TegenariaButtons.Start));
-				gamepad.SetButton(GamepadButtons.Guide, buttons.HasFlag(TegenariaButtons.Guide));
-				gamepad.SetButton(GamepadButtons.LeftStick, buttons.HasFlag(TegenariaButtons.LeftThumb));
-				gamepad.SetButton(GamepadButtons.RightStick, buttons.HasFlag(TegenariaButtons.RightThumb));
+				state.SetButton(GamepadButtons.DpadUp, buttons.HasFlag(TegenariaButtons.DpadUp));
+				state.SetButton(GamepadButtons.DpadDown, buttons.HasFlag(TegenariaButtons.DpadDown));
+				state.SetButton(GamepadButtons.DpadLeft, buttons.HasFlag(TegenariaButtons.DpadLeft));
+				state.SetButton(GamepadButtons.DpadRight, buttons.HasFlag(TegenariaButtons.DpadRight));
+				state.SetButton(GamepadButtons.West, buttons.HasFlag(TegenariaButtons.X));
+				state.SetButton(GamepadButtons.South, buttons.HasFlag(TegenariaButtons.A));
+				state.SetButton(GamepadButtons.East, buttons.HasFlag(TegenariaButtons.B));
+				state.SetButton(GamepadButtons.North, buttons.HasFlag(TegenariaButtons.Y));
+				state.SetButton(GamepadButtons.LeftShoulder, buttons.HasFlag(TegenariaButtons.LeftShoulder));
+				state.SetButton(GamepadButtons.RightShoulder, buttons.HasFlag(TegenariaButtons.RightShoulder));
+				state.SetButton(GamepadButtons.Back, buttons.HasFlag(TegenariaButtons.Back));
+				state.SetButton(GamepadButtons.Start, buttons.HasFlag(TegenariaButtons.Start));
+				state.SetButton(GamepadButtons.Guide, buttons.HasFlag(TegenariaButtons.Guide));
+				state.SetButton(GamepadButtons.LeftStick, buttons.HasFlag(TegenariaButtons.LeftThumb));
+				state.SetButton(GamepadButtons.RightStick, buttons.HasFlag(TegenariaButtons.RightThumb));
 				
-				gamepad.SetAxis(GamepadAxis.LeftStickX, input.LeftStickX);
-				gamepad.SetAxis(GamepadAxis.LeftStickY, (short)~input.LeftStickY);
-				gamepad.SetAxis(GamepadAxis.RightStickX, input.RightStickX);
-				gamepad.SetAxis(GamepadAxis.RightStickY, (short)~input.RightStickY);
-				gamepad.SetAxis(GamepadAxis.LeftTrigger, BitHelpers.ScaleByteToShort(input.LeftTrigger));
-				gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(input.RightTrigger));
+				state.LeftStickX = input.LeftStickX;
+				state.LeftStickY = (short)~input.LeftStickY;
+				state.RightStickX = input.RightStickX;
+				state.RightStickY = (short)~input.RightStickY;
+				state.LeftTrigger = BitHelpers.ScaleByteToShort(input.LeftTrigger);
+				state.RightTrigger = BitHelpers.ScaleByteToShort(input.RightTrigger);
 			}
 			
 			TegenariaSpecialButtons special = input.SpecialButtons;
-			gamepad.SetButton(GamepadButtons.LeftPaddle1, special.HasFlag(TegenariaSpecialButtons.LeftBackButton));
-			gamepad.SetButton(GamepadButtons.RightPaddle1, special.HasFlag(TegenariaSpecialButtons.RightBackButton));
-			gamepad.SetButton(GamepadButtons.Misc1, special.HasFlag(TegenariaSpecialButtons.Capture));
-			gamepad.SetButton(GamepadButtons.Misc2, special.HasFlag(TegenariaSpecialButtons.MButton));
+			state.SetButton(GamepadButtons.LeftPaddle1, special.HasFlag(TegenariaSpecialButtons.LeftBackButton));
+			state.SetButton(GamepadButtons.RightPaddle1, special.HasFlag(TegenariaSpecialButtons.RightBackButton));
+			state.SetButton(GamepadButtons.Misc1, special.HasFlag(TegenariaSpecialButtons.Capture));
+			state.SetButton(GamepadButtons.Misc2, special.HasFlag(TegenariaSpecialButtons.MButton));
 		}
 
 		public void Close()

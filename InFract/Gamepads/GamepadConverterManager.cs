@@ -35,7 +35,8 @@ public class GamepadConverterManager : IDisposable
 	{
 		foreach ((Gamepad gamepad, IGamepadConverter converter) in converters)
 		{
-			converter.Update(gamepad);
+			converter.Update(gamepad.State);
+			gamepad.Effects = converter.GetEffects();
 		}
 	}
 	

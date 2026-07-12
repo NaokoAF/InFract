@@ -38,10 +38,9 @@ public class Cyclone2Driver : IDriver
 		private readonly Gamepad gamepad;
 		private readonly ConcurrentBag<Exception> inputErrors = new();
 		private long prevHeartbeatTime;
-		private byte rumbleLeft;
-		private byte rumbleRight;
 		private long sensorTicks;
 		private ushort? prevSensorTick;
+		private GamepadEffects prevEffects;
 
 		private const int ReportSizeXUsb = 32;
 		private const int ReportSizeHid = 64;
@@ -105,14 +104,17 @@ public class Cyclone2Driver : IDriver
 				SendHeartbeat();
 			}
 
-			if (rumbleLeft != gamepad.RumbleLeft || rumbleRight != gamepad.RumbleRight)
+			GamepadEffects effects = gamepad.Effects;
+			if (prevEffects.RumbleLeft != effects.RumbleLeft || prevEffects.RumbleRight != effects.RumbleRight)
 			{
-				if (xusb?.Rumble(gamepad.RumbleLeft, gamepad.RumbleRight) ?? false)
+				if (xusb?.Rumble(effects.RumbleLeft, effects.RumbleRight) ?? false)
 				{
-					rumbleLeft = gamepad.RumbleLeft;
-					rumbleRight = gamepad.RumbleRight;
+					prevEffects.RumbleLeft = effects.RumbleLeft;
+					prevEffects.RumbleRight = effects.RumbleRight;
 				}
 			}
+
+			prevEffects = effects;
 		}
 
 		private void OnXUsbInputReceived(Exception? exception, XUsbInputReport input)
@@ -123,28 +125,29 @@ public class Cyclone2Driver : IDriver
 				return;
 			}
 
-			gamepad.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
-			gamepad.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
-			gamepad.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
-			gamepad.SetButton(GamepadButtons.DpadRight, input.Buttons.HasFlag(XUsbButtons.DpadRight));
-			gamepad.SetButton(GamepadButtons.West, input.Buttons.HasFlag(XUsbButtons.X));
-			gamepad.SetButton(GamepadButtons.South, input.Buttons.HasFlag(XUsbButtons.A));
-			gamepad.SetButton(GamepadButtons.East, input.Buttons.HasFlag(XUsbButtons.B));
-			gamepad.SetButton(GamepadButtons.North, input.Buttons.HasFlag(XUsbButtons.Y));
-			gamepad.SetButton(GamepadButtons.LeftShoulder, input.Buttons.HasFlag(XUsbButtons.LeftShoulder));
-			gamepad.SetButton(GamepadButtons.RightShoulder, input.Buttons.HasFlag(XUsbButtons.RightShoulder));
-			gamepad.SetButton(GamepadButtons.Back, input.Buttons.HasFlag(XUsbButtons.Back));
-			gamepad.SetButton(GamepadButtons.Start, input.Buttons.HasFlag(XUsbButtons.Start));
-			gamepad.SetButton(GamepadButtons.Guide, input.Buttons.HasFlag(XUsbButtons.Guide));
-			gamepad.SetButton(GamepadButtons.LeftStick, input.Buttons.HasFlag(XUsbButtons.LeftThumb));
-			gamepad.SetButton(GamepadButtons.RightStick, input.Buttons.HasFlag(XUsbButtons.RightThumb));
+			ref GamepadState state = ref gamepad.State;
+			state.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
+			state.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
+			state.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
+			state.SetButton(GamepadButtons.DpadRight, input.Buttons.HasFlag(XUsbButtons.DpadRight));
+			state.SetButton(GamepadButtons.West, input.Buttons.HasFlag(XUsbButtons.X));
+			state.SetButton(GamepadButtons.South, input.Buttons.HasFlag(XUsbButtons.A));
+			state.SetButton(GamepadButtons.East, input.Buttons.HasFlag(XUsbButtons.B));
+			state.SetButton(GamepadButtons.North, input.Buttons.HasFlag(XUsbButtons.Y));
+			state.SetButton(GamepadButtons.LeftShoulder, input.Buttons.HasFlag(XUsbButtons.LeftShoulder));
+			state.SetButton(GamepadButtons.RightShoulder, input.Buttons.HasFlag(XUsbButtons.RightShoulder));
+			state.SetButton(GamepadButtons.Back, input.Buttons.HasFlag(XUsbButtons.Back));
+			state.SetButton(GamepadButtons.Start, input.Buttons.HasFlag(XUsbButtons.Start));
+			state.SetButton(GamepadButtons.Guide, input.Buttons.HasFlag(XUsbButtons.Guide));
+			state.SetButton(GamepadButtons.LeftStick, input.Buttons.HasFlag(XUsbButtons.LeftThumb));
+			state.SetButton(GamepadButtons.RightStick, input.Buttons.HasFlag(XUsbButtons.RightThumb));
 
-			gamepad.SetAxis(GamepadAxis.LeftStickX, input.ThumbLeftX);
-			gamepad.SetAxis(GamepadAxis.LeftStickY, (short)~input.ThumbLeftY);
-			gamepad.SetAxis(GamepadAxis.RightStickX, input.ThumbRightX);
-			gamepad.SetAxis(GamepadAxis.RightStickY, (short)~input.ThumbRightY);
-			gamepad.SetAxis(GamepadAxis.LeftTrigger, BitHelpers.ScaleByteToShort(input.LeftTrigger));
-			gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(input.RightTrigger));
+			state.LeftStickX = input.ThumbLeftX;
+			state.LeftStickY = (short)~input.ThumbLeftY;
+			state.RightStickX = input.ThumbRightX;
+			state.RightStickY = (short)~input.ThumbRightY;
+			state.LeftTrigger = BitHelpers.ScaleByteToShort(input.LeftTrigger);
+			state.RightTrigger = BitHelpers.ScaleByteToShort(input.RightTrigger);
 		}
 
 		private void OnHidInputReceived(Exception? exception, ReadOnlySpan<byte> data)
@@ -157,6 +160,7 @@ public class Cyclone2Driver : IDriver
 
 			if (data[0] != ReportIdInput) return;
 
+			ref GamepadState state = ref gamepad.State;
 			ref Cyclone2InputReport input = ref Unsafe.As<byte, Cyclone2InputReport>(ref Unsafe.AsRef(in data[1]));
 
 			Cyclone2Buttons buttons = input.Buttons;
@@ -164,7 +168,8 @@ public class Cyclone2Driver : IDriver
 			if (xusb == null)
 			{
 				Cyclone2Buttons dpad = (Cyclone2Buttons)((ushort)input.Buttons & 0xF);
-				bool dpadUp = dpad is Cyclone2Buttons.DpadNorth or Cyclone2Buttons.DpadNorthwest or Cyclone2Buttons.DpadNortheast;
+				bool dpadUp = dpad is Cyclone2Buttons.DpadNorth or Cyclone2Buttons.DpadNorthwest
+					or Cyclone2Buttons.DpadNortheast;
 				bool dpadDown = dpad is Cyclone2Buttons.DpadSouth or Cyclone2Buttons.DpadSouthwest
 					or Cyclone2Buttons.DpadSoutheast;
 				bool dpadLeft = dpad is Cyclone2Buttons.DpadWest or Cyclone2Buttons.DpadNorthwest
@@ -172,34 +177,34 @@ public class Cyclone2Driver : IDriver
 				bool dpadRight = dpad is Cyclone2Buttons.DpadEast or Cyclone2Buttons.DpadNortheast
 					or Cyclone2Buttons.DpadSoutheast;
 
-				gamepad.SetButton(GamepadButtons.DpadUp, dpadUp);
-				gamepad.SetButton(GamepadButtons.DpadDown, dpadDown);
-				gamepad.SetButton(GamepadButtons.DpadLeft, dpadLeft);
-				gamepad.SetButton(GamepadButtons.DpadRight, dpadRight);
-				gamepad.SetButton(GamepadButtons.West, buttons.HasFlag(Cyclone2Buttons.West));
-				gamepad.SetButton(GamepadButtons.South, buttons.HasFlag(Cyclone2Buttons.South));
-				gamepad.SetButton(GamepadButtons.East, buttons.HasFlag(Cyclone2Buttons.East));
-				gamepad.SetButton(GamepadButtons.North, buttons.HasFlag(Cyclone2Buttons.North));
-				gamepad.SetButton(GamepadButtons.LeftShoulder, buttons.HasFlag(Cyclone2Buttons.LeftShoulder));
-				gamepad.SetButton(GamepadButtons.RightShoulder, buttons.HasFlag(Cyclone2Buttons.RightShoulder));
-				gamepad.SetButton(GamepadButtons.Back, buttons.HasFlag(Cyclone2Buttons.Share));
-				gamepad.SetButton(GamepadButtons.Start, buttons.HasFlag(Cyclone2Buttons.Options));
-				gamepad.SetButton(GamepadButtons.LeftStick, buttons.HasFlag(Cyclone2Buttons.LeftStick));
-				gamepad.SetButton(GamepadButtons.RightStick, buttons.HasFlag(Cyclone2Buttons.RightStick));
-				gamepad.SetButton(GamepadButtons.Guide, special.HasFlag(Cyclone2SpecialButtons.Guide));
+				state.SetButton(GamepadButtons.DpadUp, dpadUp);
+				state.SetButton(GamepadButtons.DpadDown, dpadDown);
+				state.SetButton(GamepadButtons.DpadLeft, dpadLeft);
+				state.SetButton(GamepadButtons.DpadRight, dpadRight);
+				state.SetButton(GamepadButtons.West, buttons.HasFlag(Cyclone2Buttons.West));
+				state.SetButton(GamepadButtons.South, buttons.HasFlag(Cyclone2Buttons.South));
+				state.SetButton(GamepadButtons.East, buttons.HasFlag(Cyclone2Buttons.East));
+				state.SetButton(GamepadButtons.North, buttons.HasFlag(Cyclone2Buttons.North));
+				state.SetButton(GamepadButtons.LeftShoulder, buttons.HasFlag(Cyclone2Buttons.LeftShoulder));
+				state.SetButton(GamepadButtons.RightShoulder, buttons.HasFlag(Cyclone2Buttons.RightShoulder));
+				state.SetButton(GamepadButtons.Back, buttons.HasFlag(Cyclone2Buttons.Share));
+				state.SetButton(GamepadButtons.Start, buttons.HasFlag(Cyclone2Buttons.Options));
+				state.SetButton(GamepadButtons.LeftStick, buttons.HasFlag(Cyclone2Buttons.LeftStick));
+				state.SetButton(GamepadButtons.RightStick, buttons.HasFlag(Cyclone2Buttons.RightStick));
+				state.SetButton(GamepadButtons.Guide, special.HasFlag(Cyclone2SpecialButtons.Guide));
 
-				gamepad.SetAxis(GamepadAxis.LeftStickX, BitHelpers.ScaleByteToShort(input.LeftStickX));
-				gamepad.SetAxis(GamepadAxis.LeftStickY, BitHelpers.ScaleByteToShort(input.LeftStickY));
-				gamepad.SetAxis(GamepadAxis.RightStickX, BitHelpers.ScaleByteToShort(input.RightStickX));
-				gamepad.SetAxis(GamepadAxis.RightStickY, BitHelpers.ScaleByteToShort(input.RightStickY));
-				gamepad.SetAxis(GamepadAxis.LeftTrigger, BitHelpers.ScaleByteToShort(input.LeftTrigger));
-				gamepad.SetAxis(GamepadAxis.RightTrigger, BitHelpers.ScaleByteToShort(input.RightTrigger));
+				state.LeftStickX = BitHelpers.ScaleByteToShort(input.LeftStickX);
+				state.LeftStickY = BitHelpers.ScaleByteToShort(input.LeftStickY);
+				state.RightStickX = BitHelpers.ScaleByteToShort(input.RightStickX);
+				state.RightStickY = BitHelpers.ScaleByteToShort(input.RightStickY);
+				state.LeftTrigger = BitHelpers.ScaleByteToShort(input.LeftTrigger);
+				state.RightTrigger = BitHelpers.ScaleByteToShort(input.RightTrigger);
 			}
 
-			gamepad.SetButton(GamepadButtons.LeftPaddle1, special.HasFlag(Cyclone2SpecialButtons.LeftBackButton));
-			gamepad.SetButton(GamepadButtons.RightPaddle1, special.HasFlag(Cyclone2SpecialButtons.RightBackButton));
-			gamepad.SetButton(GamepadButtons.Misc1, special.HasFlag(Cyclone2SpecialButtons.Capture));
-			gamepad.SetButton(GamepadButtons.Misc2, special.HasFlag(Cyclone2SpecialButtons.MButton));
+			state.SetButton(GamepadButtons.LeftPaddle1, special.HasFlag(Cyclone2SpecialButtons.LeftBackButton));
+			state.SetButton(GamepadButtons.RightPaddle1, special.HasFlag(Cyclone2SpecialButtons.RightBackButton));
+			state.SetButton(GamepadButtons.Misc1, special.HasFlag(Cyclone2SpecialButtons.Capture));
+			state.SetButton(GamepadButtons.Misc2, special.HasFlag(Cyclone2SpecialButtons.MButton));
 
 			// gyro
 			long delta = input.Timestamp - (prevSensorTick ?? input.Timestamp);
@@ -208,13 +213,13 @@ public class Cyclone2Driver : IDriver
 			sensorTicks += delta;
 			prevSensorTick = input.Timestamp;
 
-			gamepad.GyroPitch = input.GyroX;
-			gamepad.GyroYaw = input.GyroY;
-			gamepad.GyroRoll = input.GyroZ;
-			gamepad.AccelX = input.AccelX;
-			gamepad.AccelY = input.AccelY;
-			gamepad.AccelZ = input.AccelZ;
-			gamepad.ImuTimestampUs = (sensorTicks * 16) / 3; // 5.33us units;
+			state.GyroPitch = input.GyroX;
+			state.GyroYaw = input.GyroY;
+			state.GyroRoll = input.GyroZ;
+			state.AccelX = input.AccelX;
+			state.AccelY = input.AccelY;
+			state.AccelZ = input.AccelZ;
+			state.ImuTimestampUs = (sensorTicks * 16) / 3; // 5.33us units;
 		}
 
 		private bool SendHeartbeat()

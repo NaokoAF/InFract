@@ -30,23 +30,15 @@ public class DualSenseConverter : IGamepadConverter
 		gyroScale = Vector3.One * (c.GyroSpeedPlus + c.GyroSpeedMinus) / (gyroPlus - gyroMinus) * (32768f / 2000f);
 		accelScale = Vector3.One / (accelPlus - accelMinus) * (32768f / 2f);
 	}
-
-	public void Update(Gamepad gamepad)
+	
+	public void Update(GamepadState state)
 	{
-		DualSenseEffects effects = target.PollEffects();
-		gamepad.RumbleLeft = effects.RumbleLeft;
-		gamepad.RumbleRight = effects.RumbleRight;
-		gamepad.RgbRed = effects.LightbarRed;
-		gamepad.RgbGreen = effects.LightbarGreen;
-		gamepad.RgbBlue = effects.LightbarBlue;
-
-		// input
 		DualSenseInputReport input = default;
 		input.SequenceNumber = sequenceNumber++;
 
 		// power
-		int level = Math.Clamp((gamepad.BatteryLevel - 5) / 10, 0, 10);
-		input.BatteryStatus = gamepad.PowerStatus switch
+		int level = Math.Clamp((state.BatteryLevel - 5) / 10, 0, 10);
+		input.BatteryStatus = state.PowerStatus switch
 		{
 			GamepadPowerStatus.Discharging => (byte)(level),
 			GamepadPowerStatus.Charging => (byte)(0b010000 | level),
@@ -56,58 +48,58 @@ public class DualSenseConverter : IGamepadConverter
 		input.ConnectionStatus = 0x0C;
 
 		// buttons
-		bool dpadUp = gamepad.GetButton(GamepadButtons.DpadUp);
-		bool dpadDown = gamepad.GetButton(GamepadButtons.DpadDown);
-		bool dpadLeft = gamepad.GetButton(GamepadButtons.DpadLeft);
-		bool dpadRight = gamepad.GetButton(GamepadButtons.DpadRight);
+		bool dpadUp = state.GetButton(GamepadButtons.DpadUp);
+		bool dpadDown = state.GetButton(GamepadButtons.DpadDown);
+		bool dpadLeft = state.GetButton(GamepadButtons.DpadLeft);
+		bool dpadRight = state.GetButton(GamepadButtons.DpadRight);
 		input.Buttons = EncodeDpad(dpadUp, dpadDown, dpadLeft, dpadRight);
 
-		if (gamepad.GetButton(GamepadButtons.South)) input.Buttons |= DualSenseButtons.South;
-		if (gamepad.GetButton(GamepadButtons.East)) input.Buttons |= DualSenseButtons.East;
-		if (gamepad.GetButton(GamepadButtons.West)) input.Buttons |= DualSenseButtons.West;
-		if (gamepad.GetButton(GamepadButtons.North)) input.Buttons |= DualSenseButtons.North;
-		if (gamepad.GetButton(GamepadButtons.LeftStick)) input.Buttons |= DualSenseButtons.LeftStick;
-		if (gamepad.GetButton(GamepadButtons.RightStick)) input.Buttons |= DualSenseButtons.RightStick;
-		if (gamepad.GetButton(GamepadButtons.LeftShoulder)) input.Buttons |= DualSenseButtons.LeftShoulder;
-		if (gamepad.GetButton(GamepadButtons.RightShoulder)) input.Buttons |= DualSenseButtons.RightShoulder;
-		if (gamepad.GetButton(GamepadButtons.Back)) input.Buttons |= DualSenseButtons.Create;
-		if (gamepad.GetButton(GamepadButtons.Start)) input.Buttons |= DualSenseButtons.Options;
-		if (gamepad.GetButton(GamepadButtons.Guide)) input.Buttons |= DualSenseButtons.Ps;
-		if (gamepad.GetButton(GamepadButtons.Misc1)) input.Buttons |= DualSenseButtons.Touchpad;
-		if (gamepad.GetButton(GamepadButtons.Misc2)) input.Buttons |= DualSenseButtons.MicMute;
+		if (state.GetButton(GamepadButtons.South)) input.Buttons |= DualSenseButtons.South;
+		if (state.GetButton(GamepadButtons.East)) input.Buttons |= DualSenseButtons.East;
+		if (state.GetButton(GamepadButtons.West)) input.Buttons |= DualSenseButtons.West;
+		if (state.GetButton(GamepadButtons.North)) input.Buttons |= DualSenseButtons.North;
+		if (state.GetButton(GamepadButtons.LeftStick)) input.Buttons |= DualSenseButtons.LeftStick;
+		if (state.GetButton(GamepadButtons.RightStick)) input.Buttons |= DualSenseButtons.RightStick;
+		if (state.GetButton(GamepadButtons.LeftShoulder)) input.Buttons |= DualSenseButtons.LeftShoulder;
+		if (state.GetButton(GamepadButtons.RightShoulder)) input.Buttons |= DualSenseButtons.RightShoulder;
+		if (state.GetButton(GamepadButtons.Back)) input.Buttons |= DualSenseButtons.Create;
+		if (state.GetButton(GamepadButtons.Start)) input.Buttons |= DualSenseButtons.Options;
+		if (state.GetButton(GamepadButtons.Guide)) input.Buttons |= DualSenseButtons.Ps;
+		if (state.GetButton(GamepadButtons.Misc1)) input.Buttons |= DualSenseButtons.Touchpad;
+		if (state.GetButton(GamepadButtons.Misc2)) input.Buttons |= DualSenseButtons.MicMute;
 
 		if (target.IsEdge)
 		{
-			if (gamepad.GetButton(GamepadButtons.LeftPaddle1)) input.Buttons |= DualSenseButtons.LeftPaddle;
-			if (gamepad.GetButton(GamepadButtons.RightPaddle1)) input.Buttons |= DualSenseButtons.RightPaddle;
-			if (gamepad.GetButton(GamepadButtons.LeftPaddle2)) input.Buttons |= DualSenseButtons.LeftFunction;
-			if (gamepad.GetButton(GamepadButtons.RightPaddle2)) input.Buttons |= DualSenseButtons.RightFunction;
+			if (state.GetButton(GamepadButtons.LeftPaddle1)) input.Buttons |= DualSenseButtons.LeftPaddle;
+			if (state.GetButton(GamepadButtons.RightPaddle1)) input.Buttons |= DualSenseButtons.RightPaddle;
+			if (state.GetButton(GamepadButtons.LeftPaddle2)) input.Buttons |= DualSenseButtons.LeftFunction;
+			if (state.GetButton(GamepadButtons.RightPaddle2)) input.Buttons |= DualSenseButtons.RightFunction;
 		}
 
 		// axes
-		input.LeftStickX = BitHelpers.ScaleShortToByte(gamepad.GetAxis(GamepadAxis.LeftStickX));
-		input.LeftStickY = BitHelpers.ScaleShortToByte(gamepad.GetAxis(GamepadAxis.LeftStickY));
-		input.RightStickX = BitHelpers.ScaleShortToByte(gamepad.GetAxis(GamepadAxis.RightStickX));
-		input.RightStickY = BitHelpers.ScaleShortToByte(gamepad.GetAxis(GamepadAxis.RightStickY));
-		input.LeftTrigger = BitHelpers.ScaleShortToByte(gamepad.GetAxis(GamepadAxis.LeftTrigger));
-		input.RightTrigger = BitHelpers.ScaleShortToByte(gamepad.GetAxis(GamepadAxis.RightTrigger));
+		input.LeftStickX = BitHelpers.ScaleShortToByte(state.LeftStickX);
+		input.LeftStickY = BitHelpers.ScaleShortToByte(state.LeftStickY);
+		input.RightStickX = BitHelpers.ScaleShortToByte(state.RightStickX);
+		input.RightStickY = BitHelpers.ScaleShortToByte(state.RightStickY);
+		input.LeftTrigger = BitHelpers.ScaleShortToByte(state.LeftTrigger);
+		input.RightTrigger = BitHelpers.ScaleShortToByte(state.RightTrigger);
 
 		if (input.LeftTrigger > 0) input.Buttons |= DualSenseButtons.LeftTrigger;
 		if (input.RightTrigger > 0) input.Buttons |= DualSenseButtons.RightTrigger;
 
 		// gyro
-		input.SensorTimestamp = (uint)(gamepad.ImuTimestampUs * 1000 / 333); // 0.33us units
-		input.GyroX = ApplyCalibration(gamepad.GyroPitch, gyroBias.X, gyroScale.X);
-		input.GyroY = ApplyCalibration(gamepad.GyroYaw, gyroBias.Y, gyroScale.Y);
-		input.GyroZ = ApplyCalibration(gamepad.GyroRoll, gyroBias.Z, gyroScale.Z);
-		input.AccelX = ApplyCalibration(gamepad.AccelX, accelBias.X, accelScale.X);
-		input.AccelY = ApplyCalibration(gamepad.AccelY, accelBias.Y, accelScale.Y);
-		input.AccelZ = ApplyCalibration(gamepad.AccelZ, accelBias.Z, accelScale.Z);
+		input.SensorTimestamp = (uint)(state.ImuTimestampUs * 1000 / 333); // 0.33us units
+		input.GyroX = ApplyCalibration(state.GyroPitch, gyroBias.X, gyroScale.X);
+		input.GyroY = ApplyCalibration(state.GyroYaw, gyroBias.Y, gyroScale.Y);
+		input.GyroZ = ApplyCalibration(state.GyroRoll, gyroBias.Z, gyroScale.Z);
+		input.AccelX = ApplyCalibration(state.AccelX, accelBias.X, accelScale.X);
+		input.AccelY = ApplyCalibration(state.AccelY, accelBias.Y, accelScale.Y);
+		input.AccelZ = ApplyCalibration(state.AccelZ, accelBias.Z, accelScale.Z);
 
 		// touchpads
-		for (int i = 0; i < gamepad.Touches.Length; i++)
+		for (int i = 0; i < state.Touches.Length; i++)
 		{
-			GamepadTouch touch = gamepad.Touches[i];
+			GamepadTouch touch = state.Touches[i];
 			touchpadHandler.Update(
 				i,
 				(touch.X - short.MinValue) * TouchpadWidth / ushort.MaxValue,
@@ -120,31 +112,31 @@ public class DualSenseConverter : IGamepadConverter
 		{
 			// map paddles to touchpads
 			touchpadHandler.Update(
-				gamepad.Touches.Length + 0,
+				state.Touches.Length + 0,
 				TouchpadWidth / 4,
 				TouchpadHeight / 4,
-				gamepad.GetButton(GamepadButtons.LeftPaddle1)
+				state.GetButton(GamepadButtons.LeftPaddle1)
 			);
 
 			touchpadHandler.Update(
-				gamepad.Touches.Length + 1,
+				state.Touches.Length + 1,
 				TouchpadWidth - TouchpadWidth / 4,
 				TouchpadHeight / 4,
-				gamepad.GetButton(GamepadButtons.RightPaddle1)
+				state.GetButton(GamepadButtons.RightPaddle1)
 			);
 
 			touchpadHandler.Update(
-				gamepad.Touches.Length + 2,
+				state.Touches.Length + 2,
 				TouchpadWidth / 4,
 				TouchpadHeight - TouchpadHeight / 4,
-				gamepad.GetButton(GamepadButtons.LeftPaddle2)
+				state.GetButton(GamepadButtons.LeftPaddle2)
 			);
 
 			touchpadHandler.Update(
-				gamepad.Touches.Length + 3,
+				state.Touches.Length + 3,
 				TouchpadWidth - TouchpadWidth / 4,
 				TouchpadHeight - TouchpadHeight / 4,
-				gamepad.GetButton(GamepadButtons.RightPaddle2)
+				state.GetButton(GamepadButtons.RightPaddle2)
 			);
 		}
 
@@ -152,6 +144,19 @@ public class DualSenseConverter : IGamepadConverter
 		input.Touchpad2 = touchpadHandler.Finger2;
 
 		target.SendInput(input);
+	}
+
+	public GamepadEffects GetEffects()
+	{
+		DualSenseEffects effects = target.PollEffects();
+		return new()
+		{
+			RumbleLeft = effects.RumbleLeft,
+			RumbleRight = effects.RumbleRight,
+			RgbRed = effects.LightbarRed,
+			RgbGreen = effects.LightbarGreen,
+			RgbBlue = effects.LightbarBlue,
+		};
 	}
 
 	public void Dispose() => target.Dispose();
