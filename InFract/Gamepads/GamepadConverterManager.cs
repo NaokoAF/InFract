@@ -8,7 +8,6 @@ public class GamepadConverterManager : IDisposable
 	private readonly ILogger<GamepadConverterManager> logger;
 	private readonly IPlatform platform;
 	private readonly Dictionary<Gamepad, IGamepadConverter> converters = new();
-	private readonly Dictionary<Gamepad, GamepadState> gamepadStateMap = new();
 
 	public GamepadConverterManager(ILogger<GamepadConverterManager> logger, IPlatform platform)
 	{
@@ -22,15 +21,17 @@ public class GamepadConverterManager : IDisposable
 		if (converters.TryGetValue(gamepad, out converter)) return converter;
 
 		converter = platform.CreateConverter(gamepad);
+		gamepad.InputReceived += converter.Update;
+		
 		converters.Add(gamepad, converter);
-		gamepadStateMap.Add(gamepad, gamepad.State);
 		return converter;
 	}
 
 	public void Close(Gamepad gamepad)
 	{
 		if (!converters.Remove(gamepad, out var converter)) return;
-		gamepadStateMap.Remove(gamepad);
+		
+		gamepad.InputReceived -= converter.Update;
 		
 		converter.Dispose();
 	}
@@ -41,19 +42,11 @@ public class GamepadConverterManager : IDisposable
 		{
 			try
 			{
-				GamepadState state = gamepad.State;
-				GamepadState prevState = gamepadStateMap[gamepad];
-				if (state.SequenceNumber != prevState.SequenceNumber)
-				{
-					converter.Update(state);
-					gamepadStateMap[gamepad] = state;
-				}
-				
 				gamepad.Effects = converter.GetEffects();
 			}
 			catch (Exception e)
 			{
-				logger.LogError(e, $"Failed to update gamepad converter for {gamepad.Descriptor.Name}");
+				logger.LogError(e, $"Failed to poll gamepad converter: {gamepad.Descriptor.Name}");
 			}
 		}
 	}

@@ -36,6 +36,8 @@ public class TegenariaDriver : IDriver
 		private readonly IXUsbInterface? xusb;
 		private readonly Gamepad gamepad;
 		private readonly ConcurrentBag<Exception> inputErrors = new();
+		private readonly ConcurrentQueue<GamepadState> inputQueue = new();
+		private GamepadState prevState;
 		private GamepadEffects prevEffects;
 
 		private const int ReportSizeXUsb = 32;
@@ -89,6 +91,11 @@ public class TegenariaDriver : IDriver
 		{
 			if (!inputErrors.IsEmpty) throw new AggregateException(inputErrors);
 			
+			while (inputQueue.TryDequeue(out GamepadState state))
+			{
+				gamepad.PushInput(state);
+			}
+			
 			GamepadEffects effects = gamepad.Effects;
 			if (prevEffects.RumbleLeft != effects.RumbleLeft || prevEffects.RumbleRight != effects.RumbleRight)
 			{
@@ -110,7 +117,7 @@ public class TegenariaDriver : IDriver
 				return;
 			}
 			
-			ref GamepadState state = ref gamepad.State;
+			GamepadState state = prevState;
 			state.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
 			state.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
 			state.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
@@ -134,7 +141,8 @@ public class TegenariaDriver : IDriver
 			state.LeftTrigger = BitHelpers.ScaleByteToShort(input.LeftTrigger);
 			state.RightTrigger = BitHelpers.ScaleByteToShort(input.RightTrigger);
 			
-			Interlocked.Increment(ref state.SequenceNumber);
+			inputQueue.Enqueue(state);
+			prevState = state;
 		}
 
 		private void OnHidInputReceived(Exception? exception, ReadOnlySpan<byte> data)
@@ -147,7 +155,7 @@ public class TegenariaDriver : IDriver
 			
 			if (data[0] != ReportIdInput && data[1] != CommandIdInput) return;
 
-			ref GamepadState state = ref gamepad.State;
+			GamepadState state = prevState;
 			ref TegenariaInputReport input = ref Unsafe.As<byte, TegenariaInputReport>(ref Unsafe.AsRef(in data[2]));
 
 			if (xusb == null)
@@ -183,7 +191,8 @@ public class TegenariaDriver : IDriver
 			state.SetButton(GamepadButtons.Misc1, special.HasFlag(TegenariaSpecialButtons.Capture));
 			state.SetButton(GamepadButtons.Misc2, special.HasFlag(TegenariaSpecialButtons.MButton));
 			
-			Interlocked.Increment(ref state.SequenceNumber);
+			inputQueue.Enqueue(state);
+			prevState = state;
 		}
 
 		public void Close()

@@ -37,9 +37,11 @@ public class Cyclone2Driver : IDriver
 		private readonly IXUsbInterface? xusb;
 		private readonly Gamepad gamepad;
 		private readonly ConcurrentBag<Exception> inputErrors = new();
+		private readonly ConcurrentQueue<GamepadState> inputQueue = new();
 		private long prevHeartbeatTime;
 		private long sensorTicks;
 		private ushort? prevSensorTick;
+		private GamepadState prevState;
 		private GamepadEffects prevEffects;
 
 		private const int ReportSizeXUsb = 32;
@@ -98,6 +100,11 @@ public class Cyclone2Driver : IDriver
 		{
 			if (!inputErrors.IsEmpty) throw new AggregateException(inputErrors);
 
+			while (inputQueue.TryDequeue(out GamepadState state))
+			{
+				gamepad.PushInput(state);
+			}
+
 			// periodically send heartbeat to enable hid mode
 			if (Stopwatch.GetTimestamp() - prevHeartbeatTime >= HeartbeatRate)
 			{
@@ -125,7 +132,7 @@ public class Cyclone2Driver : IDriver
 				return;
 			}
 
-			ref GamepadState state = ref gamepad.State;
+			GamepadState state = prevState;
 			state.SetButton(GamepadButtons.DpadUp, input.Buttons.HasFlag(XUsbButtons.DpadUp));
 			state.SetButton(GamepadButtons.DpadDown, input.Buttons.HasFlag(XUsbButtons.DpadDown));
 			state.SetButton(GamepadButtons.DpadLeft, input.Buttons.HasFlag(XUsbButtons.DpadLeft));
@@ -148,8 +155,9 @@ public class Cyclone2Driver : IDriver
 			state.RightStickY = (short)~input.ThumbRightY;
 			state.LeftTrigger = BitHelpers.ScaleByteToShort(input.LeftTrigger);
 			state.RightTrigger = BitHelpers.ScaleByteToShort(input.RightTrigger);
-
-			Interlocked.Increment(ref state.SequenceNumber);
+			
+			inputQueue.Enqueue(state);
+			prevState = state;
 		}
 
 		private void OnHidInputReceived(Exception? exception, ReadOnlySpan<byte> data)
@@ -162,7 +170,7 @@ public class Cyclone2Driver : IDriver
 
 			if (data[0] != ReportIdInput) return;
 
-			ref GamepadState state = ref gamepad.State;
+			GamepadState state = prevState;
 			ref Cyclone2InputReport input = ref Unsafe.As<byte, Cyclone2InputReport>(ref Unsafe.AsRef(in data[1]));
 
 			Cyclone2Buttons buttons = input.Buttons;
@@ -223,7 +231,8 @@ public class Cyclone2Driver : IDriver
 			state.AccelZ = input.AccelZ;
 			state.ImuTimestampUs = (sensorTicks * 16) / 3; // 5.33us units;
 
-			Interlocked.Increment(ref state.SequenceNumber);
+			inputQueue.Enqueue(state);
+			prevState = state;
 		}
 
 		private bool SendHeartbeat()

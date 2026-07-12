@@ -3,8 +3,9 @@ namespace InFract.Gamepads;
 public class Gamepad
 {
 	public GamepadDescriptor Descriptor { get; }
-	public GamepadState State;
 	public GamepadEffects Effects;
+	
+	public event Action<GamepadState>? InputReceived;
 
 	public Gamepad(GamepadDescriptor descriptor)
 	{
@@ -12,10 +13,7 @@ public class Gamepad
 			throw new ArgumentOutOfRangeException(nameof(descriptor));
 		
 		Descriptor = descriptor;
-
-		State.PowerStatus = GamepadPowerStatus.NoBattery;
-		State.BatteryLevel = 100;
-		State.LeftTrigger = short.MinValue;
-		State.RightTrigger = short.MinValue;
 	}
+
+	public void PushInput(GamepadState state) => InputReceived?.Invoke(state);
 }
