@@ -53,14 +53,14 @@ public class LinuxPlatform : IPlatform
 			TaskCreationOptions.LongRunning,
 			TaskScheduler.Default
 		);
-		
+
 		Task.Factory.StartNew(
 			HidRawLoop,
 			cts.Token,
 			TaskCreationOptions.LongRunning,
 			TaskScheduler.Default
 		);
-		
+
 		return ValueTask.CompletedTask;
 	}
 
@@ -106,7 +106,7 @@ public class LinuxPlatform : IPlatform
 			break;
 		}
 
-		if(hidrawDevice == null) throw new InvalidOperationException("HIDRAW interface not found");
+		if (hidrawDevice == null) throw new InvalidOperationException("HIDRAW interface not found");
 
 		for (int i = 0; i <= 10; i++)
 		{
@@ -127,9 +127,14 @@ public class LinuxPlatform : IPlatform
 	{
 		while (!cts.Token.IsCancellationRequested)
 		{
-			if (!libUsb.HandleEvents(PollTimeout)) continue;
-			
-			manualReset.Set();
+			try
+			{
+				if (libUsb.HandleEvents(PollTimeout)) manualReset.Set();
+			}
+			catch (Exception e)
+			{
+				logger.LogError(e, "Failed to handle LibUsb events");
+			}
 		}
 	}
 
@@ -137,9 +142,14 @@ public class LinuxPlatform : IPlatform
 	{
 		while (!cts.Token.IsCancellationRequested)
 		{
-			if (!hidRaw.Poll(PollTimeout)) continue;
-			
-			manualReset.Set();
+			try
+			{
+				if (hidRaw.Poll(PollTimeout)) manualReset.Set();
+			}
+			catch (Exception e)
+			{
+				logger.LogError(e, "Failed to poll HIDRAW devices");
+			}
 		}
 	}
 

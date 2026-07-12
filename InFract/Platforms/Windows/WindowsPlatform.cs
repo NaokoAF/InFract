@@ -76,7 +76,14 @@ public class WindowsPlatform : IPlatform
 
 	public void Poll()
 	{
-		libUsb.HandleEvents(PollTimeout);
+		try
+		{
+			libUsb.HandleEvents(PollTimeout);
+		}
+		catch (Exception e)
+		{
+			logger.LogError(e, "Failed to handle LibUsb events");
+		}
 	}
 
 	public IGamepadConverter CreateConverter(Gamepad gamepad)
